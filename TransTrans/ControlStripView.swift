@@ -32,6 +32,17 @@ struct ControlStripView: View {
                 Spacer()
 
                 Button {
+                    viewModel.displayMode = viewModel.displayMode == .dual ? .subtitle : .dual
+                } label: {
+                    Image(systemName: viewModel.displayMode == .subtitle ? "captions.bubble.fill" : "captions.bubble")
+                        .font(.title3)
+                        .foregroundStyle(viewModel.displayMode == .subtitle ? Color.accentColor : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(!viewModel.isSessionActive && viewModel.displayMode == .dual)
+                .help(viewModel.displayMode == .dual ? "Subtitle Mode (⌘D)" : "Dual Pane (⌘D)")
+
+                Button {
                     viewModel.showSettings.toggle()
                 } label: {
                     Image(systemName: "gearshape.fill")

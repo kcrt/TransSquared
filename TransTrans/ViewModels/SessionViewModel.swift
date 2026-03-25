@@ -11,6 +11,16 @@ struct TranscriptLine: Identifiable {
     let id = UUID()
     var text: String
     var isPartial: Bool
+    /// The time when this line was finalized (non-partial). Used for subtitle expiration.
+    var finalizedAt: Date?
+}
+
+/// Controls which panes are visible in the main content area.
+enum DisplayMode: String, CaseIterable {
+    /// Show both source (transcription) and target (translation) panes.
+    case dual
+    /// Show only the target (translation) pane in a subtitle-style overlay at the bottom of the screen.
+    case subtitle
 }
 
 @Observable
@@ -25,6 +35,7 @@ final class SessionViewModel {
     var isAlwaysOnTop = true
     var errorMessage: String?
     var showSettings = false
+    var displayMode: DisplayMode = .dual
 
     /// Custom vocabulary words per source locale, keyed by locale identifier (persisted via UserDefaults).
     var contextualStringsByLocale: [String: [String]] = {
@@ -520,7 +531,7 @@ final class SessionViewModel {
                         targetLines[idx] = TranscriptLine(text: response.targetText, isPartial: true)
                     }
                 } else {
-                    targetLines[idx] = TranscriptLine(text: response.targetText, isPartial: false)
+                    targetLines[idx] = TranscriptLine(text: response.targetText, isPartial: false, finalizedAt: Date())
                 }
             }
         } catch {
@@ -529,7 +540,7 @@ final class SessionViewModel {
             if !isPartial {
                 let idx = targetIndex ?? (targetLines.count - 1)
                 if idx >= 0 && idx < targetLines.count {
-                    targetLines[idx] = TranscriptLine(text: "[Translation failed]", isPartial: false)
+                    targetLines[idx] = TranscriptLine(text: "[Translation failed]", isPartial: false, finalizedAt: Date())
                 }
             }
         }
