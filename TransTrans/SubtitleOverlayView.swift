@@ -32,7 +32,6 @@ struct SubtitleOverlayView: View {
                             .foregroundStyle(line.isPartial ? .white.opacity(0.7) : .white)
                             .italic(line.isPartial)
                             .multilineTextAlignment(.center)
-                            .textSelection(.enabled)
                     }
                 }
                 .padding(.horizontal, 24)

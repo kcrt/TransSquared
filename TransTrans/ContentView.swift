@@ -1,6 +1,8 @@
 import SwiftUI
-import Combine
 import Translation
+import os
+
+private let logger = Logger(subsystem: "com.transtrans", category: "ContentView")
 
 struct ContentView: View {
     @State private var viewModel = SessionViewModel()
@@ -10,9 +12,17 @@ struct ContentView: View {
         HStack(spacing: 0) {
             // Main content: top-bottom split
             VStack(spacing: 0) {
-                TranscriptPaneView(lines: viewModel.sourceLines, fontSize: viewModel.fontSize)
+                TranscriptPaneView(
+                    lines: viewModel.sourceLines,
+                    fontSize: viewModel.fontSize,
+                    placeholder: viewModel.isSessionActive ? nil : String(localized: "Press \u{2318}R to start transcription")
+                )
                 Divider()
-                TranscriptPaneView(lines: viewModel.targetLines, fontSize: viewModel.fontSize)
+                TranscriptPaneView(
+                    lines: viewModel.targetLines,
+                    fontSize: viewModel.fontSize,
+                    placeholder: viewModel.isSessionActive ? nil : String(localized: "Translation will appear here")
+                )
             }
 
             Divider()
@@ -36,6 +46,7 @@ struct ContentView: View {
             if let window = notification.object as? NSWindow,
                !(window is NSPanel),
                viewModel.displayMode == .subtitle {
+                logger.info("Display mode → dual (reason: main window deminiaturized from Dock)")
                 viewModel.displayMode = .dual
             }
         }
@@ -45,18 +56,21 @@ struct ContentView: View {
         .onChange(of: viewModel.isSessionActive) {
             // Return to dual mode when the session stops
             if !viewModel.isSessionActive && viewModel.displayMode == .subtitle {
+                logger.info("Display mode → dual (reason: session ended while in subtitle mode)")
                 viewModel.displayMode = .dual
             }
         }
-        .onChange(of: viewModel.displayMode) {
-            if viewModel.displayMode == .subtitle {
+        .onChange(of: viewModel.displayMode) { oldValue, newValue in
+            logger.info("Display mode changed: \(oldValue.rawValue) → \(newValue.rawValue)")
+            if newValue == .subtitle {
                 subtitleController.onDismiss = { [weak viewModel] in
+                    logger.info("Display mode → dual (reason: subtitle overlay dismissed by user)")
                     viewModel?.displayMode = .dual
                 }
                 subtitleController.show(viewModel: viewModel)
                 // Miniaturize the main window so only the subtitle overlay is visible
                 mainWindow?.miniaturize(nil)
-            } else {
+            } else if oldValue == .subtitle {
                 subtitleController.close()
                 // Restore the main window
                 mainWindow?.deminiaturize(nil)
@@ -79,12 +93,33 @@ struct ContentView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
+        .alert(
+            viewModel.permissionIssue?.title ?? "",
+            isPresented: showPermissionBinding
+        ) {
+            Button("Open System Settings") {
+                viewModel.openSystemSettings()
+                viewModel.permissionIssue = nil
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.permissionIssue = nil
+            }
+        } message: {
+            Text(viewModel.permissionIssue?.message ?? "")
+        }
     }
 
     private var showErrorBinding: Binding<Bool> {
         Binding(
             get: { viewModel.errorMessage != nil },
             set: { if !$0 { viewModel.errorMessage = nil } }
+        )
+    }
+
+    private var showPermissionBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.permissionIssue != nil },
+            set: { if !$0 { viewModel.permissionIssue = nil } }
         )
     }
 

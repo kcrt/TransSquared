@@ -4,6 +4,37 @@ import Translation
 import AVFoundation
 import os
 
+/// Describes a missing permission that the user needs to grant in System Settings.
+enum PermissionIssue: Identifiable {
+    case microphone
+    case speechRecognition
+
+    var id: String {
+        switch self {
+        case .microphone: return "microphone"
+        case .speechRecognition: return "speechRecognition"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .microphone:
+            return String(localized: "Microphone Access Required")
+        case .speechRecognition:
+            return String(localized: "Speech Recognition Access Required")
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .microphone:
+            return String(localized: "TransTrans needs microphone access for speech transcription. Please enable it in System Settings > Privacy & Security > Microphone.")
+        case .speechRecognition:
+            return String(localized: "TransTrans needs speech recognition access for transcription. Please enable it in System Settings > Privacy & Security > Speech Recognition.")
+        }
+    }
+}
+
 private let logger = Logger(subsystem: "com.transtrans", category: "Session")
 
 /// A single line of transcribed/translated text displayed in the UI.
@@ -36,6 +67,7 @@ final class SessionViewModel {
     var errorMessage: String?
     var showSettings = false
     var displayMode: DisplayMode = .dual
+    var permissionIssue: PermissionIssue?
 
     /// Custom vocabulary words per source locale, keyed by locale identifier (persisted via UserDefaults).
     var contextualStringsByLocale: [String: [String]] = {
@@ -154,6 +186,64 @@ final class SessionViewModel {
         logger.info("Source locale: \(self.sourceLocaleIdentifier), Target language: \(self.targetLanguageIdentifier)")
     }
 
+    // MARK: - Permission Checks
+
+    /// Checks microphone and speech recognition permissions, returning false if denied.
+    private func checkPermissions() async -> Bool {
+        // Check microphone access
+        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        switch micStatus {
+        case .notDetermined:
+            let granted = await AVCaptureDevice.requestAccess(for: .audio)
+            if !granted {
+                logger.warning("Microphone access denied by user")
+                permissionIssue = .microphone
+                return false
+            }
+        case .denied, .restricted:
+            logger.warning("Microphone access denied (status: \(micStatus.rawValue))")
+            permissionIssue = .microphone
+            return false
+        case .authorized:
+            break
+        @unknown default:
+            break
+        }
+
+        // Check speech recognition access
+        let speechStatus = SFSpeechRecognizer.authorizationStatus()
+        switch speechStatus {
+        case .notDetermined:
+            let granted = await withCheckedContinuation { continuation in
+                SFSpeechRecognizer.requestAuthorization { status in
+                    continuation.resume(returning: status == .authorized)
+                }
+            }
+            if !granted {
+                logger.warning("Speech recognition access denied by user")
+                permissionIssue = .speechRecognition
+                return false
+            }
+        case .denied, .restricted:
+            logger.warning("Speech recognition access denied (status: \(speechStatus.rawValue))")
+            permissionIssue = .speechRecognition
+            return false
+        case .authorized:
+            break
+        @unknown default:
+            break
+        }
+
+        return true
+    }
+
+    /// Opens the Privacy & Security section in System Settings.
+    func openSystemSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     // MARK: - Session Control
 
     func startSession() async {
@@ -163,6 +253,12 @@ final class SessionViewModel {
         }
 
         logger.info("Starting session: source=\(self.sourceLocaleIdentifier), target=\(self.targetLanguageIdentifier)")
+
+        // Verify permissions before proceeding
+        guard await checkPermissions() else {
+            logger.info("Session start aborted: missing permissions")
+            return
+        }
 
         errorMessage = nil
         sourceLines = []
