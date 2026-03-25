@@ -32,6 +32,17 @@ struct ControlStripView: View {
                 Spacer()
 
                 Button {
+                    viewModel.clearHistory()
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isSessionActive || (viewModel.sourceLines.isEmpty && viewModel.targetLines.isEmpty))
+                .help("Clear History")
+
+                Button {
                     viewModel.displayMode = viewModel.displayMode == .dual ? .subtitle : .dual
                 } label: {
                     Image(systemName: viewModel.displayMode == .subtitle ? "captions.bubble.fill" : "captions.bubble")

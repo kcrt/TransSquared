@@ -44,6 +44,8 @@ struct TranscriptLine: Identifiable {
     var isPartial: Bool
     /// The time when this line was finalized (non-partial). Used for subtitle expiration.
     var finalizedAt: Date?
+    /// True for visual separator lines inserted between sessions.
+    var isSeparator: Bool = false
 }
 
 /// Controls which panes are visible in the main content area.
@@ -261,8 +263,18 @@ final class SessionViewModel {
         }
 
         errorMessage = nil
-        sourceLines = []
-        targetLines = []
+
+        // Remove any leftover partial lines from the previous session
+        sourceLines.removeAll { $0.isPartial }
+        targetLines.removeAll { $0.isPartial }
+
+        // Insert a separator if there is previous history
+        if !sourceLines.isEmpty {
+            let separator = TranscriptLine(text: "", isPartial: false, isSeparator: true)
+            sourceLines.append(separator)
+            targetLines.append(separator)
+        }
+
         pendingSentenceBuffer = ""
         segmentIndex = 0
         sessionStartDate = Date()
@@ -644,18 +656,23 @@ final class SessionViewModel {
 
     // MARK: - Copy / Export Helpers
 
+    func clearHistory() {
+        sourceLines = []
+        targetLines = []
+    }
+
     func copyAllOriginal() -> String {
-        sourceLines.filter { !$0.isPartial }.map(\.text).joined(separator: "\n")
+        sourceLines.filter { !$0.isPartial && !$0.isSeparator }.map(\.text).joined(separator: "\n")
     }
 
     func copyAllTranslation() -> String {
-        targetLines.filter { !$0.isPartial }.map(\.text).joined(separator: "\n")
+        targetLines.filter { !$0.isPartial && !$0.isSeparator }.map(\.text).joined(separator: "\n")
     }
 
     func copyAllInterleaved() -> String {
         var result: [String] = []
-        let finalSource = sourceLines.filter { !$0.isPartial }
-        let finalTarget = targetLines.filter { !$0.isPartial }
+        let finalSource = sourceLines.filter { !$0.isPartial && !$0.isSeparator }
+        let finalTarget = targetLines.filter { !$0.isPartial && !$0.isSeparator }
         let count = max(finalSource.count, finalTarget.count)
         for i in 0..<count {
             if i < finalSource.count {

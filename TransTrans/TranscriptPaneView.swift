@@ -18,13 +18,19 @@ struct TranscriptPaneView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
                         ForEach(lines) { line in
-                            Text(line.text)
-                                .font(.system(size: fontSize))
-                                .foregroundStyle(line.isPartial ? .secondary : .primary)
-                                .italic(line.isPartial)
-                                .id(line.id)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            if line.isSeparator {
+                                Divider()
+                                    .padding(.vertical, 4)
+                                    .id(line.id)
+                            } else {
+                                Text(line.text)
+                                    .font(.system(size: fontSize))
+                                    .foregroundStyle(line.isPartial ? .secondary : .primary)
+                                    .italic(line.isPartial)
+                                    .id(line.id)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                     }
                     .padding(8)

@@ -160,6 +160,11 @@ struct ContentView: View {
         Button("Copy All (Interleaved)") {
             copyToClipboard(viewModel.copyAllInterleaved())
         }
+        Divider()
+        Button("Clear History") {
+            viewModel.clearHistory()
+        }
+        .disabled(viewModel.isSessionActive)
     }
 
     private func copyToClipboard(_ string: String) {

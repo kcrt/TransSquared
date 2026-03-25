@@ -13,6 +13,8 @@ struct SubtitleOverlayView: View {
 
     private var visibleLines: [TranscriptLine] {
         lines.filter { line in
+            // Never show separator lines in subtitle mode
+            if line.isSeparator { return false }
             // Always show partial (in-progress) lines
             if line.isPartial { return true }
             // Show finalized lines that haven't expired yet
