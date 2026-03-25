@@ -8,9 +8,9 @@ struct ContentView: View {
         HStack(spacing: 0) {
             // Main content: top-bottom split
             VStack(spacing: 0) {
-                SourcePaneView(viewModel: viewModel)
+                TranscriptPaneView(lines: viewModel.sourceLines, fontSize: viewModel.fontSize)
                 Divider()
-                TargetPaneView(viewModel: viewModel)
+                TranscriptPaneView(lines: viewModel.targetLines, fontSize: viewModel.fontSize)
             }
 
             Divider()
