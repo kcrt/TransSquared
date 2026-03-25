@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftData
 import Speech
 import Translation
 import AVFoundation
@@ -272,12 +271,8 @@ final class SessionViewModel {
         let userRegion = Locale.current.region
         logger.info("swapLanguages: userRegion=\(userRegion?.identifier ?? "nil")")
 
-        // For languages like "en" with no region, prefer the likely default locale (e.g. en_US for "en")
-        let likelyLocaleID = Locale.Language(identifier: oldTargetIdentifier).maximalIdentifier
-            // maximalIdentifier returns e.g. "en-Latn-US" → extract region
-        let likelyRegionStr = likelyLocaleID.split(separator: "-").last.map(String.init)
-        let likelyRegion = likelyRegionStr.map { Locale.Region($0) }
-        logger.info("swapLanguages: likelyLocaleID='\(likelyLocaleID)', likelyRegion=\(likelyRegion?.identifier ?? "nil")")
+        let likelyRegion = Self.likelyRegion(for: oldTargetIdentifier)
+        logger.info("swapLanguages: likelyRegion=\(likelyRegion?.identifier ?? "nil")")
 
         let newSource = candidates.first(where: { $0.identifier == oldTargetIdentifier })
             ?? candidates.first(where: { $0.language.region == targetLang.region && targetLang.region != nil })
@@ -330,16 +325,7 @@ final class SessionViewModel {
             let candidates = available.filter { $0.languageCode == targetLang.languageCode }
             logger.info("updateTargetLanguages: fallback candidates for langCode=\(targetLang.languageCode?.identifier ?? "nil"): [\(candidates.map(\.minimalIdentifier).joined(separator: ", "))]")
 
-            // Prefer: exact region match with user locale → no region → likely default region → first
-            let userRegion = Locale.current.region
-            let likelyRegion = Locale.Language(identifier: targetLanguageIdentifier).maximalIdentifier
-                .split(separator: "-").last.map { Locale.Region(String($0)) }
-            logger.info("updateTargetLanguages: userRegion=\(userRegion?.identifier ?? "nil"), likelyRegion=\(likelyRegion?.identifier ?? "nil")")
-
-            if let match = candidates.first(where: { $0.region == userRegion })
-                ?? candidates.first(where: { $0.region == nil })
-                ?? candidates.first(where: { $0.region == likelyRegion })
-                ?? candidates.first {
+            if let match = Self.bestLanguageMatch(from: candidates, for: targetLanguageIdentifier) {
                 logger.info("updateTargetLanguages: re-mapped target '\(self.targetLanguageIdentifier)' → '\(match.minimalIdentifier)'")
                 targetLanguageIdentifier = match.minimalIdentifier
             } else if let first = available.first {
@@ -349,6 +335,29 @@ final class SessionViewModel {
         }
 
         logger.info("updateTargetLanguages: final target='\(self.targetLanguageIdentifier)'")
+    }
+
+    // MARK: - Locale Resolution Helpers
+
+    /// Extracts the likely region from a language identifier via its maximal form.
+    /// e.g. "en" → maximalIdentifier "en-Latn-US" → Region("US")
+    private static func likelyRegion(for identifier: String) -> Locale.Region? {
+        let maximal = Locale.Language(identifier: identifier).maximalIdentifier
+        return maximal.split(separator: "-").last.map { Locale.Region(String($0)) }
+    }
+
+    /// Picks the best match from a list of `Locale.Language` candidates, preferring
+    /// user region → no region → likely default region → first available.
+    private static func bestLanguageMatch(
+        from candidates: [Locale.Language],
+        for identifier: String
+    ) -> Locale.Language? {
+        let userRegion = Locale.current.region
+        let likely = likelyRegion(for: identifier)
+        return candidates.first(where: { $0.region == userRegion })
+            ?? candidates.first(where: { $0.region == nil })
+            ?? candidates.first(where: { $0.region == likely })
+            ?? candidates.first
     }
 
     // MARK: - Font Size

@@ -2,8 +2,6 @@ import Speech
 import AVFoundation
 import os
 
-private let logger = Logger(subsystem: "com.transtrans", category: "Transcription")
-
 enum TranscriptionEvent: Sendable {
     case partial(String)
     case final_(String)
@@ -11,6 +9,7 @@ enum TranscriptionEvent: Sendable {
 }
 
 actor TranscriptionManager {
+    private nonisolated let logger = Logger(subsystem: "com.transtrans", category: "Transcription")
     private var analyzer: SpeechAnalyzer?
     private var transcriber: SpeechTranscriber?
     private var audioCaptureService: AudioCaptureService?
@@ -95,6 +94,7 @@ actor TranscriptionManager {
         // Start consuming transcription results
         let capturedTranscriber = newTranscriber
         let capturedContinuation = continuation
+        let logger = self.logger
         resultTask = Task { [weak self] in
             logger.debug("Result consumption task started")
             var resultCount = 0
@@ -188,7 +188,6 @@ actor TranscriptionManager {
 enum TranscriptionError: Error, LocalizedError {
     case alreadyRunning
     case audioFormatUnavailable
-    case unsupportedLocale
 
     var errorDescription: String? {
         switch self {
@@ -196,8 +195,6 @@ enum TranscriptionError: Error, LocalizedError {
             return "Transcription is already running."
         case .audioFormatUnavailable:
             return "No compatible audio format available. Assets may need to be installed."
-        case .unsupportedLocale:
-            return "The selected locale is not supported for transcription."
         }
     }
 }

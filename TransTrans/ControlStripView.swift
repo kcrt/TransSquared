@@ -72,22 +72,14 @@ struct ControlStripView: View {
                     Button {
                         viewModel.selectedMicrophoneID = ""
                     } label: {
-                        if viewModel.selectedMicrophoneID.isEmpty {
-                            Label("System Default", systemImage: "checkmark")
-                        } else {
-                            Text("System Default")
-                        }
+                        CheckmarkLabel(title: "System Default", isSelected: viewModel.selectedMicrophoneID.isEmpty)
                     }
                     Divider()
                     ForEach(viewModel.availableMicrophones, id: \.uniqueID) { device in
                         Button {
                             viewModel.selectedMicrophoneID = device.uniqueID
                         } label: {
-                            if viewModel.selectedMicrophoneID == device.uniqueID {
-                                Label(device.localizedName, systemImage: "checkmark")
-                            } else {
-                                Text(device.localizedName)
-                            }
+                            CheckmarkLabel(title: device.localizedName, isSelected: viewModel.selectedMicrophoneID == device.uniqueID)
                         }
                     }
                 } label: {
@@ -116,11 +108,10 @@ struct ControlStripView: View {
                                 await viewModel.updateTargetLanguages()
                             }
                         } label: {
-                            if viewModel.sourceLocaleIdentifier == locale.identifier {
-                                Label(locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier, systemImage: "checkmark")
-                            } else {
-                                Text(locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier)
-                            }
+                            CheckmarkLabel(
+                                title: locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier,
+                                isSelected: viewModel.sourceLocaleIdentifier == locale.identifier
+                            )
                         }
                     }
                 } label: {
@@ -152,11 +143,10 @@ struct ControlStripView: View {
                             logger.info("Target language selected: '\(language.minimalIdentifier)' (was '\(viewModel.targetLanguageIdentifier)')")
                             viewModel.targetLanguageIdentifier = language.minimalIdentifier
                         } label: {
-                            if viewModel.targetLanguageIdentifier == language.minimalIdentifier {
-                                Label(displayName(for: language), systemImage: "checkmark")
-                            } else {
-                                Text(displayName(for: language))
-                            }
+                            CheckmarkLabel(
+                                title: displayName(for: language),
+                                isSelected: viewModel.targetLanguageIdentifier == language.minimalIdentifier
+                            )
                         }
                     }
                 } label: {
@@ -201,6 +191,22 @@ struct ControlStripView: View {
         return "Microphone"
     }
 }
+// MARK: - Checkmark Menu Item Label
+
+/// A menu button label that shows a checkmark when selected.
+private struct CheckmarkLabel: View {
+    let title: String
+    let isSelected: Bool
+
+    var body: some View {
+        if isSelected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
+        }
+    }
+}
+
 // MARK: - Audio Waveform Visualization
 
 struct AudioWaveformView: View {
