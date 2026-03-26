@@ -43,15 +43,7 @@ final class SubtitleWindowController {
         // Allow the panel to accept mouse events for text selection but not become key
         panel.becomesKeyOnlyIfNeeded = true
 
-        let hostingView = NSHostingView(
-            rootView: SubtitleOverlayView(
-                lines: viewModel.targetLines,
-                fontSize: viewModel.fontSize,
-                now: Date(),
-                onDismiss: { [weak self] in self?.onDismiss?() }
-            )
-        )
-        panel.contentView = hostingView
+        panel.contentView = makeSubtitleHostingView()
         panel.orderFrontRegardless()
 
         self.window = panel
@@ -100,15 +92,18 @@ final class SubtitleWindowController {
     }
 
     private func updateContent() {
-        guard let viewModel, let window else { return }
-        let hostingView = NSHostingView(
+        guard viewModel != nil, let window else { return }
+        window.contentView = makeSubtitleHostingView()
+    }
+
+    private func makeSubtitleHostingView() -> NSHostingView<SubtitleOverlayView> {
+        NSHostingView(
             rootView: SubtitleOverlayView(
-                lines: viewModel.targetLines,
-                fontSize: viewModel.fontSize,
+                lines: viewModel?.targetLines ?? [],
+                fontSize: viewModel?.fontSize ?? 16,
                 now: Date(),
                 onDismiss: { [weak self] in self?.onDismiss?() }
             )
         )
-        window.contentView = hostingView
     }
 }

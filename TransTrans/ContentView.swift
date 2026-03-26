@@ -40,17 +40,14 @@ struct ContentView: View {
         }
         .background(VisualEffectBackground(material: .hudWindow))
         .frame(minWidth: 320, minHeight: viewModel.displayMode == .multi ? 320 : 200)
-        .translationTask(viewModel.translationConfig) { session in
-            await viewModel.handleTranslationSession(session)
+        .translationTask(viewModel.translationSlots.indices.contains(0) ? viewModel.translationSlots[0].config : nil) { session in
+            await viewModel.handleTranslationSession(session, slot: 0)
         }
-        .translationTask(viewModel.displayMode == .multi ? viewModel.multiTranslationConfigs[0] : nil) { session in
-            await viewModel.handleMultiTranslationSession(session, slot: 0)
+        .translationTask(viewModel.translationSlots.indices.contains(1) ? viewModel.translationSlots[1].config : nil) { session in
+            await viewModel.handleTranslationSession(session, slot: 1)
         }
-        .translationTask(viewModel.displayMode == .multi && viewModel.multiTargetCount >= 2 ? viewModel.multiTranslationConfigs[1] : nil) { session in
-            await viewModel.handleMultiTranslationSession(session, slot: 1)
-        }
-        .translationTask(viewModel.displayMode == .multi && viewModel.multiTargetCount >= 3 ? viewModel.multiTranslationConfigs[2] : nil) { session in
-            await viewModel.handleMultiTranslationSession(session, slot: 2)
+        .translationTask(viewModel.translationSlots.indices.contains(2) ? viewModel.translationSlots[2].config : nil) { session in
+            await viewModel.handleTranslationSession(session, slot: 2)
         }
         .task {
             await viewModel.loadSupportedLocales()

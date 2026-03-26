@@ -12,23 +12,12 @@ struct ControlStripView: View {
         HStack(alignment: .top, spacing: 4) {
             // Column 1 (left): font size, spacer, network, pin
             VStack(spacing: 8) {
-                Button {
+                IconButton(icon: "textformat.size.larger", help: "Increase Font Size (⌘+)") {
                     viewModel.increaseFontSize()
-                } label: {
-                    Image(systemName: "textformat.size.larger")
-                        .font(.title3)
                 }
-                .buttonStyle(.plain)
-                .help("Increase Font Size (⌘+)")
-
-                Button {
+                IconButton(icon: "textformat.size.smaller", help: "Decrease Font Size (⌘-)") {
                     viewModel.decreaseFontSize()
-                } label: {
-                    Image(systemName: "textformat.size.smaller")
-                        .font(.title3)
                 }
-                .buttonStyle(.plain)
-                .help("Decrease Font Size (⌘-)")
 
                 Spacer()
 
@@ -53,16 +42,13 @@ struct ControlStripView: View {
                 .disabled(viewModel.sourceLines.isEmpty && viewModel.targetLines.isEmpty)
                 .help("Save Transcript (⌘S)")
 
-                Button {
+                IconButton(
+                    icon: "trash",
+                    help: "Clear History",
+                    isDisabled: viewModel.isSessionActive || (viewModel.sourceLines.isEmpty && viewModel.targetLines.isEmpty)
+                ) {
                     viewModel.clearHistory()
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isSessionActive || (viewModel.sourceLines.isEmpty && viewModel.targetLines.isEmpty))
-                .help("Clear History")
 
                 // Toggle: Single (dual) ↔ Multi pane
                 Button {
@@ -92,25 +78,17 @@ struct ControlStripView: View {
                 .disabled(viewModel.displayMode == .multi || (!viewModel.isSessionActive && viewModel.displayMode != .subtitle))
                 .help(viewModel.displayMode == .subtitle ? "Single Pane (⌘D)" : "Subtitle Mode (⌘D)")
 
-                Button {
+                IconButton(icon: "gearshape.fill", help: "Settings") {
                     viewModel.showSettings.toggle()
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .help("Settings")
 
-                Button {
+                IconButton(
+                    icon: "pin.fill",
+                    help: "Always on Top (⌘T)",
+                    tint: viewModel.isAlwaysOnTop ? .orange : .secondary
+                ) {
                     viewModel.isAlwaysOnTop.toggle()
-                } label: {
-                    Image(systemName: "pin.fill")
-                        .font(.title3)
-                        .foregroundStyle(viewModel.isAlwaysOnTop ? .orange : .secondary)
                 }
-                .buttonStyle(.plain)
-                .help("Always on Top (⌘T)")
             }
             .frame(width: 28)
 
@@ -223,15 +201,13 @@ struct ControlStripView: View {
                     // Dual-pane: swap button + single target picker
 
                     // Swap languages
-                    Button {
+                    IconButton(
+                        icon: "arrow.up.arrow.down",
+                        help: "Swap Languages (⌘⇧S)",
+                        isDisabled: viewModel.isSessionActive
+                    ) {
                         viewModel.swapLanguages()
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
-                            .font(.title3)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(viewModel.isSessionActive)
-                    .help("Swap Languages (⌘⇧S)")
 
                     // Target language (TO)
                     Menu {
@@ -315,6 +291,28 @@ struct ControlStripView: View {
         .help("Target Language \(slot + 1)")
     }
 }
+// MARK: - Icon Button
+
+/// A plain icon button with consistent styling used throughout the control strip.
+private struct IconButton: View {
+    let icon: String
+    let help: String
+    var tint: Color = .secondary
+    var isDisabled: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(tint)
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .help(help)
+    }
+}
+
 // MARK: - Checkmark Menu Item Label
 
 /// A menu button label that shows a checkmark when selected.
