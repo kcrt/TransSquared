@@ -65,6 +65,13 @@ enum DisplayMode: String, CaseIterable {
     case multi
 }
 
+/// A single auto-replacement rule: when `from` appears in transcription output, replace with `to`.
+struct AutoReplacement: Codable, Identifiable, Equatable {
+    var id = UUID()
+    var from: String
+    var to: String
+}
+
 /// Encapsulates the mutable translation state for one target language slot.
 /// Used for both the single-pane target and each multi-pane target.
 struct TranslationSlot {
@@ -127,6 +134,37 @@ final class SessionViewModel {
     var currentContextualStrings: [String] {
         get { contextualStringsByLocale[sourceLocaleIdentifier] ?? [] }
         set { contextualStringsByLocale[sourceLocaleIdentifier] = newValue }
+    }
+
+    /// Auto-replacement rules per source locale, keyed by locale identifier (persisted via UserDefaults).
+    var autoReplacementsByLocale: [String: [AutoReplacement]] = {
+        guard let data = UserDefaults.standard.data(forKey: "autoReplacementsByLocale"),
+              let dict = try? JSONDecoder().decode([String: [AutoReplacement]].self, from: data) else {
+            return [:]
+        }
+        return dict
+    }() {
+        didSet {
+            if let data = try? JSONEncoder().encode(autoReplacementsByLocale) {
+                UserDefaults.standard.set(data, forKey: "autoReplacementsByLocale")
+            }
+        }
+    }
+
+    /// Convenience accessor for the current source locale's auto-replacement rules.
+    var currentAutoReplacements: [AutoReplacement] {
+        get { autoReplacementsByLocale[sourceLocaleIdentifier] ?? [] }
+        set { autoReplacementsByLocale[sourceLocaleIdentifier] = newValue }
+    }
+
+    /// Applies auto-replacement rules to the given text.
+    func applyAutoReplacements(_ text: String) -> String {
+        var result = text
+        for rule in currentAutoReplacements {
+            guard !rule.from.isEmpty else { continue }
+            result = result.replacingOccurrences(of: rule.from, with: rule.to)
+        }
+        return result
     }
 
     /// Rolling audio level samples for waveform visualization (0.0–1.0).
@@ -605,7 +643,8 @@ final class SessionViewModel {
 
         // Process queued translations using the session provided by the closure.
         // Do NOT store the session — it is only valid within this closure scope.
-        while !translationSlots[slot].queue.isEmpty {
+        // Re-check bounds after each await since translationSlots may be rebuilt.
+        while slot < translationSlots.count && !translationSlots[slot].queue.isEmpty {
             let item = translationSlots[slot].queue.removeFirst()
             await translateSentence(item.sentence, using: session, slot: slot, targetIndex: item.targetIndex, isPartial: item.isPartial)
         }
@@ -636,8 +675,9 @@ final class SessionViewModel {
 
     private func handleTranscriptionEvent(_ event: TranscriptionEvent) {
         switch event {
-        case .partial(let text):
-            logger.debug("Event: partial \"\(text)\"")
+        case .partial(let rawText):
+            let text = applyAutoReplacements(rawText)
+            logger.debug("Event: partial \"\(rawText)\" → \"\(text)\"")
             // Remove old partial line and add new one
             if let lastIndex = sourceLines.indices.last, sourceLines[lastIndex].isPartial {
                 sourceLines[lastIndex] = TranscriptLine(text: text, isPartial: true)
@@ -648,8 +688,9 @@ final class SessionViewModel {
             // Request partial translation (debounced)
             requestPartialTranslation(for: pendingSentenceBuffer + text)
 
-        case .final_(let text):
-            logger.info("Event: final \"\(text)\"")
+        case .final_(let rawText):
+            let text = applyAutoReplacements(rawText)
+            logger.info("Event: final \"\(rawText)\" → \"\(text)\"")
             // Cancel any pending partial translation timers
             for slot in 0..<translationSlots.count {
                 translationSlots[slot].partialTranslationTimer?.cancel()
@@ -709,11 +750,12 @@ final class SessionViewModel {
     }
 
     private func requestPartialTranslationForSlot(_ slot: Int, text: String) {
+        guard slot < translationSlots.count else { return }
         translationSlots[slot].partialTranslationTimer?.cancel()
         let capturedSlot = slot
         translationSlots[slot].partialTranslationTimer = Task {
             try? await Task.sleep(nanoseconds: Self.partialTranslationDebounce)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, capturedSlot < translationSlots.count else { return }
 
             // Create or update the partial target line
             let pIdx = translationSlots[capturedSlot].partialTargetIndex
@@ -744,6 +786,7 @@ final class SessionViewModel {
     }
 
     private func commitSentenceForSlot(_ slot: Int, sentence: String) {
+        guard slot < translationSlots.count else { return }
         translationSlots[slot].partialTranslationTimer?.cancel()
         translationSlots[slot].partialTranslationTimer = nil
 
@@ -772,7 +815,9 @@ final class SessionViewModel {
         do {
             let response = try await session.translate(sentence)
             logger.info("Slot \(slot) translation result (\(isPartial ? "partial" : "final")): \"\(response.targetText)\"")
-            guard targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count else { return }
+            // Re-check slot bounds after await since translationSlots may have been rebuilt
+            guard slot < translationSlots.count,
+                  targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count else { return }
             // For partial translations, only update if the line is still partial
             // (a final translation may have already replaced it)
             if isPartial {
@@ -786,7 +831,8 @@ final class SessionViewModel {
             logger.error("Slot \(slot) translation failed: \(error.localizedDescription)")
             // Only show error for final translations; silently ignore partial failures
             if !isPartial {
-                if targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count {
+                if slot < translationSlots.count,
+                   targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count {
                     translationSlots[slot].lines[targetIndex] = TranscriptLine(text: "[Translation failed]", isPartial: false, finalizedAt: Date())
                 }
             }
@@ -860,10 +906,12 @@ final class SessionViewModel {
     func copyAllTranslation() -> String {
         if displayMode == .multi {
             var result: [String] = []
-            for slot in 0..<multiTargetCount {
-                let langId = multiTargetLanguageIdentifiers[slot].uppercased()
+            let targets = multiTargetLines
+            for slot in 0..<min(multiTargetCount, targets.count) {
+                let langId = slot < multiTargetLanguageIdentifiers.count
+                    ? multiTargetLanguageIdentifiers[slot].uppercased() : "?"
                 result.append("[\(langId)]")
-                result.append(contentsOf: multiTargetLines[slot].finalizedLines.map(\.text))
+                result.append(contentsOf: targets[slot].finalizedLines.map(\.text))
                 result.append("")
             }
             return result.joined(separator: "\n")
@@ -876,15 +924,17 @@ final class SessionViewModel {
 
         if displayMode == .multi {
             var result: [String] = []
-            let multiTargets = (0..<multiTargetCount).map { slot in
-                multiTargetLines[slot].finalizedLines
+            let targets = multiTargetLines
+            let safeCount = min(multiTargetCount, targets.count)
+            let multiTargets = (0..<safeCount).map { slot in
+                targets[slot].finalizedLines
             }
             let maxCount = ([finalSource.count] + multiTargets.map(\.count)).max() ?? 0
             for i in 0..<maxCount {
                 if i < finalSource.count {
                     result.append(finalSource[i].text)
                 }
-                for slot in 0..<multiTargetCount {
+                for slot in 0..<safeCount {
                     if i < multiTargets[slot].count {
                         result.append(multiTargets[slot][i].text)
                     }

@@ -143,8 +143,9 @@ struct ContentView: View {
             ? Locale.current.localizedString(forIdentifier: viewModel.multiTargetLanguageIdentifiers[slot])
                 ?? viewModel.multiTargetLanguageIdentifiers[slot].uppercased()
             : "?"
+        let lines = slot < viewModel.multiTargetLines.count ? viewModel.multiTargetLines[slot] : []
         TranscriptPaneView(
-            lines: viewModel.multiTargetLines[slot],
+            lines: lines,
             fontSize: viewModel.fontSize,
             placeholder: viewModel.isSessionActive ? nil : langId
         )
