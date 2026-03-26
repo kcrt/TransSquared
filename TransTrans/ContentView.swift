@@ -2,7 +2,7 @@ import SwiftUI
 import Translation
 import os
 
-private let logger = Logger(subsystem: "com.transtrans", category: "ContentView")
+private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "ContentView")
 
 struct ContentView: View {
     @State private var viewModel = SessionViewModel()

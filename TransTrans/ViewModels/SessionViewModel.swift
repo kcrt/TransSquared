@@ -35,7 +35,7 @@ enum PermissionIssue: Identifiable {
     }
 }
 
-private let logger = Logger(subsystem: "com.transtrans", category: "Session")
+private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "Session")
 
 /// A single line of transcribed/translated text displayed in the UI.
 struct TranscriptLine: Identifiable {

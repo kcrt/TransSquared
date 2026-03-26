@@ -3,7 +3,7 @@ import AVFoundation
 import UniformTypeIdentifiers
 import os
 
-private let logger = Logger(subsystem: "com.transtrans", category: "ControlStrip")
+private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "ControlStrip")
 
 struct ControlStripView: View {
     @Bindable var viewModel: SessionViewModel

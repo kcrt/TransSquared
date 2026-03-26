@@ -3,7 +3,7 @@ import CoreMedia
 import Speech
 import os
 
-private let logger = Logger(subsystem: "com.transtrans", category: "AudioCapture")
+private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "AudioCapture")
 
 /// Captures microphone audio using AVCaptureSession and produces an AsyncStream of AnalyzerInput.
 /// This approach works around a known macOS 26 regression (FB19024508) where AVAudioEngine
@@ -14,7 +14,7 @@ final class AudioCaptureService {
     private var delegate: AudioCaptureDelegate?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
     private var isCapturing = false
-    private let captureQueue = DispatchQueue(label: "com.transtrans.audiocapture", qos: .userInteractive)
+    private let captureQueue = DispatchQueue(label: "net.kcrt.app.transtrans.audiocapture", qos: .userInteractive)
 
     /// Publishes audio level samples (0.0–1.0) for waveform visualization.
     private var levelContinuation: AsyncStream<Float>.Continuation?
