@@ -18,11 +18,19 @@ struct ContentView: View {
                     placeholder: viewModel.isSessionActive ? nil : String(localized: "Press \u{2318}R to start transcription")
                 )
                 Divider()
-                TranscriptPaneView(
-                    lines: viewModel.targetLines,
-                    fontSize: viewModel.fontSize,
-                    placeholder: viewModel.isSessionActive ? nil : String(localized: "Translation will appear here")
-                )
+
+                if viewModel.displayMode == .multi {
+                    ForEach(0..<viewModel.multiTargetCount, id: \.self) { slot in
+                        if slot > 0 { Divider() }
+                        multiTargetPane(slot: slot)
+                    }
+                } else {
+                    TranscriptPaneView(
+                        lines: viewModel.targetLines,
+                        fontSize: viewModel.fontSize,
+                        placeholder: viewModel.isSessionActive ? nil : String(localized: "Translation will appear here")
+                    )
+                }
             }
 
             Divider()
@@ -31,9 +39,18 @@ struct ContentView: View {
             ControlStripView(viewModel: viewModel)
         }
         .background(VisualEffectBackground(material: .hudWindow))
-        .frame(minWidth: 320, minHeight: 200)
+        .frame(minWidth: 320, minHeight: viewModel.displayMode == .multi ? 320 : 200)
         .translationTask(viewModel.translationConfig) { session in
             await viewModel.handleTranslationSession(session)
+        }
+        .translationTask(viewModel.displayMode == .multi ? viewModel.multiTranslationConfigs[0] : nil) { session in
+            await viewModel.handleMultiTranslationSession(session, slot: 0)
+        }
+        .translationTask(viewModel.displayMode == .multi && viewModel.multiTargetCount >= 2 ? viewModel.multiTranslationConfigs[1] : nil) { session in
+            await viewModel.handleMultiTranslationSession(session, slot: 1)
+        }
+        .translationTask(viewModel.displayMode == .multi && viewModel.multiTargetCount >= 3 ? viewModel.multiTranslationConfigs[2] : nil) { session in
+            await viewModel.handleMultiTranslationSession(session, slot: 2)
         }
         .task {
             await viewModel.loadSupportedLocales()
@@ -124,6 +141,19 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    private func multiTargetPane(slot: Int) -> some View {
+        let langId = slot < viewModel.multiTargetLanguageIdentifiers.count
+            ? Locale.current.localizedString(forIdentifier: viewModel.multiTargetLanguageIdentifiers[slot])
+                ?? viewModel.multiTargetLanguageIdentifiers[slot].uppercased()
+            : "?"
+        TranscriptPaneView(
+            lines: viewModel.multiTargetLines[slot],
+            fontSize: viewModel.fontSize,
+            placeholder: viewModel.isSessionActive ? nil : langId
+        )
+    }
+
+    @ViewBuilder
     private var shortcutButtons: some View {
         VStack {
             Button("Start/Stop") { viewModel.toggleSession() }
@@ -136,13 +166,25 @@ struct ContentView: View {
                 .keyboardShortcut("-", modifiers: .command)
             Button("Pin") { viewModel.isAlwaysOnTop.toggle() }
                 .keyboardShortcut("t", modifiers: .command)
-            Button("DisplayMode") {
-                // Only allow entering subtitle mode when a session is active
-                if viewModel.isSessionActive || viewModel.displayMode == .subtitle {
-                    viewModel.displayMode = viewModel.displayMode == .dual ? .subtitle : .dual
+            Button("SubtitleMode") {
+                // Only allow entering subtitle mode when a session is active and in dual mode
+                if viewModel.displayMode == .subtitle {
+                    viewModel.displayMode = .dual
+                } else if viewModel.isSessionActive && viewModel.displayMode == .dual {
+                    viewModel.displayMode = .subtitle
                 }
             }
                 .keyboardShortcut("d", modifiers: .command)
+            Button("MultiPane") {
+                guard !viewModel.isSessionActive else { return }
+                viewModel.displayMode = viewModel.displayMode == .multi ? .dual : .multi
+            }
+                .keyboardShortcut("m", modifiers: .command)
+            Button("Save") {
+                viewModel.saveTranscript(contentType: .both)
+            }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(viewModel.sourceLines.isEmpty && viewModel.targetLines.isEmpty)
         }
         .frame(width: 0, height: 0)
         .opacity(0)
@@ -160,6 +202,19 @@ struct ContentView: View {
         Button("Copy All (Interleaved)") {
             copyToClipboard(viewModel.copyAllInterleaved())
         }
+        Divider()
+        Menu("Save Transcript") {
+            Button("Original") {
+                viewModel.saveTranscript(contentType: .original)
+            }
+            Button("Translation") {
+                viewModel.saveTranscript(contentType: .translation)
+            }
+            Button("Both (Interleaved)") {
+                viewModel.saveTranscript(contentType: .both)
+            }
+        }
+        .disabled(viewModel.sourceLines.isEmpty && viewModel.targetLines.isEmpty)
         Divider()
         Button("Clear History") {
             viewModel.clearHistory()

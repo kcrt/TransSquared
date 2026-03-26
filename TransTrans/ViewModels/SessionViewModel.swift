@@ -54,6 +54,8 @@ enum DisplayMode: String, CaseIterable {
     case dual
     /// Show only the target (translation) pane in a subtitle-style overlay at the bottom of the screen.
     case subtitle
+    /// Show source pane on top with multiple translation panes stacked below (up to 3 targets).
+    case multi
 }
 
 @Observable
@@ -68,7 +70,16 @@ final class SessionViewModel {
     var isAlwaysOnTop = true
     var errorMessage: String?
     var showSettings = false
-    var displayMode: DisplayMode = .dual
+    var displayMode: DisplayMode = {
+        if let raw = UserDefaults.standard.string(forKey: "displayMode"),
+           let mode = DisplayMode(rawValue: raw),
+           mode != .subtitle {  // Don't restore subtitle mode on launch (requires active session)
+            return mode
+        }
+        return .dual
+    }() {
+        didSet { UserDefaults.standard.set(displayMode.rawValue, forKey: "displayMode") }
+    }
     var permissionIssue: PermissionIssue?
 
     /// Custom vocabulary words per source locale, keyed by locale identifier (persisted via UserDefaults).
@@ -114,6 +125,35 @@ final class SessionViewModel {
     // Translation configuration — triggers .translationTask() when invalidated
     var translationConfig: TranslationSession.Configuration?
 
+    // MARK: - Multi-Pane State
+
+    /// Maximum number of target languages in multi-pane mode.
+    static let maxMultiTargetCount = 3
+
+    /// Number of active target panes in multi mode (2 or 3).
+    var multiTargetCount: Int = {
+        let stored = UserDefaults.standard.integer(forKey: "multiTargetCount")
+        return (stored >= 2 && stored <= 3) ? stored : 2
+    }() {
+        didSet { UserDefaults.standard.set(multiTargetCount, forKey: "multiTargetCount") }
+    }
+
+    /// Target language identifiers for multi-pane mode (up to 3 slots).
+    var multiTargetLanguageIdentifiers: [String] = {
+        if let stored = UserDefaults.standard.array(forKey: "multiTargetLanguageIdentifiers") as? [String], stored.count >= 3 {
+            return stored
+        }
+        return ["en", "zh-Hans", "ko"]
+    }() {
+        didSet { UserDefaults.standard.set(multiTargetLanguageIdentifiers, forKey: "multiTargetLanguageIdentifiers") }
+    }
+
+    /// Translation lines for each multi-pane target slot.
+    var multiTargetLines: [[TranscriptLine]] = [[], [], []]
+
+    /// Translation configs for each multi-pane target slot — triggers `.translationTask()` when invalidated.
+    var multiTranslationConfigs: [TranslationSession.Configuration?] = [nil, nil, nil]
+
     // MARK: - Computed Properties
 
     var sourceLocale: Locale {
@@ -147,6 +187,13 @@ final class SessionViewModel {
     private var partialTargetIndex: Int = -1
     // Debounce timer for partial translations
     private var partialTranslationTimer: Task<Void, Never>?
+
+    // Per-slot translation queues for multi-pane mode
+    private var multiTranslationQueues: [[(sentence: String, targetIndex: Int, isPartial: Bool)]] = [[], [], []]
+    // Per-slot partial line indices for multi-pane mode
+    private var multiPartialTargetIndices: [Int] = [-1, -1, -1]
+    // Per-slot debounce timers for multi-pane partial translations
+    private var multiPartialTranslationTimers: [Task<Void, Never>?] = [nil, nil, nil]
     private static let partialTranslationDebounce: UInt64 = 300_000_000 // 0.3 seconds
 
     // Sentence-ending punctuation characters
@@ -267,12 +314,21 @@ final class SessionViewModel {
         // Remove any leftover partial lines from the previous session
         sourceLines.removeAll { $0.isPartial }
         targetLines.removeAll { $0.isPartial }
+        for slot in 0..<Self.maxMultiTargetCount {
+            multiTargetLines[slot].removeAll { $0.isPartial }
+        }
 
         // Insert a separator if there is previous history
         if !sourceLines.isEmpty {
             let separator = TranscriptLine(text: "", isPartial: false, isSeparator: true)
             sourceLines.append(separator)
-            targetLines.append(separator)
+            if displayMode == .multi {
+                for slot in 0..<multiTargetCount {
+                    multiTargetLines[slot].append(separator)
+                }
+            } else {
+                targetLines.append(separator)
+            }
         }
 
         pendingSentenceBuffer = ""
@@ -283,14 +339,33 @@ final class SessionViewModel {
         partialTranslationTimer?.cancel()
         partialTranslationTimer = nil
 
+        // Reset multi-pane state
+        for slot in 0..<Self.maxMultiTargetCount {
+            multiTranslationQueues[slot] = []
+            multiPartialTargetIndices[slot] = -1
+            multiPartialTranslationTimers[slot]?.cancel()
+            multiPartialTranslationTimers[slot] = nil
+        }
+
         isSessionActive = true
 
-        // Set up translation config
-        translationConfig = TranslationSession.Configuration(
-            source: sourceLocale.language,
-            target: targetLanguage
-        )
-        logger.debug("Translation config created: \(self.sourceLocale.language.minimalIdentifier) → \(self.targetLanguage.minimalIdentifier)")
+        // Set up translation config(s)
+        if displayMode == .multi {
+            for slot in 0..<multiTargetCount {
+                let targetLang = Locale.Language(identifier: multiTargetLanguageIdentifiers[slot])
+                multiTranslationConfigs[slot] = TranslationSession.Configuration(
+                    source: sourceLocale.language,
+                    target: targetLang
+                )
+                logger.debug("Multi translation config created for slot \(slot): \(self.sourceLocale.language.minimalIdentifier) → \(targetLang.minimalIdentifier)")
+            }
+        } else {
+            translationConfig = TranslationSession.Configuration(
+                source: sourceLocale.language,
+                target: targetLanguage
+            )
+            logger.debug("Translation config created: \(self.sourceLocale.language.minimalIdentifier) → \(self.targetLanguage.minimalIdentifier)")
+        }
 
         transcriptionTask = Task {
             do {
@@ -339,6 +414,12 @@ final class SessionViewModel {
         partialTranslationTimer?.cancel()
         partialTranslationTimer = nil
 
+        // Cancel multi-pane timers
+        for slot in 0..<Self.maxMultiTargetCount {
+            multiPartialTranslationTimers[slot]?.cancel()
+            multiPartialTranslationTimers[slot] = nil
+        }
+
         // Flush any remaining buffer
         if !pendingSentenceBuffer.isEmpty {
             logger.debug("Flushing pending buffer: \"\(self.pendingSentenceBuffer)\"")
@@ -351,6 +432,11 @@ final class SessionViewModel {
 
         isSessionActive = false
         translationConfig = nil
+        for slot in 0..<Self.maxMultiTargetCount {
+            multiTranslationConfigs[slot] = nil
+            multiTranslationQueues[slot] = []
+            multiPartialTargetIndices[slot] = -1
+        }
         audioLevels = Array(repeating: 0, count: 20)
         logger.info("Session stopped (source lines: \(self.sourceLines.count), target lines: \(self.targetLines.count))")
     }
@@ -507,6 +593,38 @@ final class SessionViewModel {
         }
     }
 
+    /// Called from the `.translationTask()` modifier for a multi-pane slot.
+    func handleMultiTranslationSession(_ session: TranslationSession, slot: Int) async {
+        guard slot >= 0 && slot < Self.maxMultiTargetCount else { return }
+        logger.info("Multi translation session available for slot \(slot), queued: \(self.multiTranslationQueues[slot].count)")
+
+        while !multiTranslationQueues[slot].isEmpty {
+            let item = multiTranslationQueues[slot].removeFirst()
+            await translateMultiSentence(item.sentence, using: session, slot: slot, targetIndex: item.targetIndex, isPartial: item.isPartial)
+        }
+    }
+
+    // MARK: - Multi-Pane Target Management
+
+    func addMultiTarget() {
+        guard multiTargetCount < Self.maxMultiTargetCount else { return }
+        multiTargetCount += 1
+        // Pick a default language not already selected
+        let used = Set(multiTargetLanguageIdentifiers.prefix(multiTargetCount - 1))
+        if let available = supportedTargetLanguages.first(where: { !used.contains($0.minimalIdentifier) }) {
+            if multiTargetLanguageIdentifiers.count < multiTargetCount {
+                multiTargetLanguageIdentifiers.append(available.minimalIdentifier)
+            } else {
+                multiTargetLanguageIdentifiers[multiTargetCount - 1] = available.minimalIdentifier
+            }
+        }
+    }
+
+    func removeMultiTarget() {
+        guard multiTargetCount > 2 else { return }
+        multiTargetCount -= 1
+    }
+
     // MARK: - Private Methods
 
     private func handleTranscriptionEvent(_ event: TranscriptionEvent) {
@@ -576,6 +694,11 @@ final class SessionViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
+        if displayMode == .multi {
+            requestMultiPartialTranslation(for: trimmed)
+            return
+        }
+
         // Debounce: cancel previous timer and start a new one
         partialTranslationTimer?.cancel()
         partialTranslationTimer = Task {
@@ -599,11 +722,41 @@ final class SessionViewModel {
         }
     }
 
+    private func requestMultiPartialTranslation(for trimmed: String) {
+        for slot in 0..<multiTargetCount {
+            multiPartialTranslationTimers[slot]?.cancel()
+            let capturedSlot = slot
+            multiPartialTranslationTimers[slot] = Task {
+                try? await Task.sleep(nanoseconds: Self.partialTranslationDebounce)
+                guard !Task.isCancelled else { return }
+
+                if multiPartialTargetIndices[capturedSlot] >= 0
+                    && multiPartialTargetIndices[capturedSlot] < multiTargetLines[capturedSlot].count
+                    && multiTargetLines[capturedSlot][multiPartialTargetIndices[capturedSlot]].isPartial {
+                    // Reuse existing partial line
+                } else {
+                    multiTargetLines[capturedSlot].append(TranscriptLine(text: "…", isPartial: true))
+                    multiPartialTargetIndices[capturedSlot] = multiTargetLines[capturedSlot].count - 1
+                }
+
+                let idx = multiPartialTargetIndices[capturedSlot]
+                logger.debug("Queuing multi partial translation slot \(capturedSlot) (targetIndex: \(idx)): \"\(trimmed)\"")
+                multiTranslationQueues[capturedSlot].append((sentence: trimmed, targetIndex: idx, isPartial: true))
+                multiTranslationConfigs[capturedSlot]?.invalidate()
+            }
+        }
+    }
+
     private func commitSentence(_ sentence: String) {
         guard !sentence.isEmpty else { return }
 
         segmentIndex += 1
         logger.info("Committing sentence #\(self.segmentIndex): \"\(sentence)\"")
+
+        if displayMode == .multi {
+            commitMultiSentence(sentence)
+            return
+        }
 
         // If there's a partial translation line, reuse it for the final translation
         if partialTargetIndex >= 0 && partialTargetIndex < targetLines.count && targetLines[partialTargetIndex].isPartial {
@@ -622,6 +775,30 @@ final class SessionViewModel {
             logger.debug("Queuing for translation (targetIndex: \(targetIndex))")
             translationQueue.append((sentence: sentence, targetIndex: targetIndex, isPartial: false))
             translationConfig?.invalidate()
+        }
+    }
+
+    private func commitMultiSentence(_ sentence: String) {
+        for slot in 0..<multiTargetCount {
+            multiPartialTranslationTimers[slot]?.cancel()
+            multiPartialTranslationTimers[slot] = nil
+
+            if multiPartialTargetIndices[slot] >= 0
+                && multiPartialTargetIndices[slot] < multiTargetLines[slot].count
+                && multiTargetLines[slot][multiPartialTargetIndices[slot]].isPartial {
+                let targetIndex = multiPartialTargetIndices[slot]
+                multiPartialTargetIndices[slot] = -1
+                logger.debug("Reusing multi partial line for final translation (slot: \(slot), targetIndex: \(targetIndex))")
+                multiTranslationQueues[slot].append((sentence: sentence, targetIndex: targetIndex, isPartial: false))
+                multiTranslationConfigs[slot]?.invalidate()
+            } else {
+                multiTargetLines[slot].append(TranscriptLine(text: "…", isPartial: true))
+                let targetIndex = multiTargetLines[slot].count - 1
+                multiPartialTargetIndices[slot] = -1
+                logger.debug("Queuing multi translation (slot: \(slot), targetIndex: \(targetIndex))")
+                multiTranslationQueues[slot].append((sentence: sentence, targetIndex: targetIndex, isPartial: false))
+                multiTranslationConfigs[slot]?.invalidate()
+            }
         }
     }
 
@@ -654,11 +831,88 @@ final class SessionViewModel {
         }
     }
 
+    private func translateMultiSentence(_ sentence: String, using session: TranslationSession, slot: Int, targetIndex: Int, isPartial: Bool) async {
+        logger.debug("Translating multi slot \(slot) (\(isPartial ? "partial" : "final")): \"\(sentence)\"")
+        do {
+            let response = try await session.translate(sentence)
+            logger.info("Multi slot \(slot) translation result (\(isPartial ? "partial" : "final")): \"\(response.targetText)\"")
+            guard targetIndex >= 0 && targetIndex < multiTargetLines[slot].count else { return }
+            if isPartial {
+                if multiTargetLines[slot][targetIndex].isPartial {
+                    multiTargetLines[slot][targetIndex] = TranscriptLine(text: response.targetText, isPartial: true)
+                }
+            } else {
+                multiTargetLines[slot][targetIndex] = TranscriptLine(text: response.targetText, isPartial: false, finalizedAt: Date())
+            }
+        } catch {
+            logger.error("Multi slot \(slot) translation failed: \(error.localizedDescription)")
+            if !isPartial {
+                if targetIndex >= 0 && targetIndex < multiTargetLines[slot].count {
+                    multiTargetLines[slot][targetIndex] = TranscriptLine(text: "[Translation failed]", isPartial: false, finalizedAt: Date())
+                }
+            }
+        }
+    }
+
+    // MARK: - Save / Export
+
+    enum SaveContentType {
+        case original
+        case translation
+        case both
+    }
+
+    /// Presents an NSSavePanel and writes the selected content to a text file.
+    func saveTranscript(contentType: SaveContentType) {
+        let content: String
+        switch contentType {
+        case .original:
+            content = copyAllOriginal()
+        case .translation:
+            content = copyAllTranslation()
+        case .both:
+            content = copyAllInterleaved()
+        }
+
+        guard !content.isEmpty else { return }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.plainText]
+        panel.nameFieldStringValue = defaultFileName(for: contentType)
+        panel.canCreateDirectories = true
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try content.write(to: url, atomically: true, encoding: .utf8)
+            logger.info("Transcript saved to \(url.path)")
+        } catch {
+            logger.error("Failed to save transcript: \(error.localizedDescription)")
+            errorMessage = "Failed to save: \(error.localizedDescription)"
+        }
+    }
+
+    private func defaultFileName(for contentType: SaveContentType) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timestamp = formatter.string(from: Date())
+        let suffix: String
+        switch contentType {
+        case .original: suffix = "original"
+        case .translation: suffix = "translation"
+        case .both: suffix = "interleaved"
+        }
+        return "TransTrans_\(timestamp)_\(suffix).txt"
+    }
+
     // MARK: - Copy / Export Helpers
 
     func clearHistory() {
         sourceLines = []
         targetLines = []
+        for slot in 0..<Self.maxMultiTargetCount {
+            multiTargetLines[slot] = []
+        }
     }
 
     func copyAllOriginal() -> String {
@@ -666,12 +920,45 @@ final class SessionViewModel {
     }
 
     func copyAllTranslation() -> String {
-        targetLines.filter { !$0.isPartial && !$0.isSeparator }.map(\.text).joined(separator: "\n")
+        if displayMode == .multi {
+            var result: [String] = []
+            for slot in 0..<multiTargetCount {
+                let langId = multiTargetLanguageIdentifiers[slot].uppercased()
+                result.append("[\(langId)]")
+                result.append(contentsOf: multiTargetLines[slot]
+                    .filter { !$0.isPartial && !$0.isSeparator }
+                    .map(\.text))
+                result.append("")
+            }
+            return result.joined(separator: "\n")
+        }
+        return targetLines.filter { !$0.isPartial && !$0.isSeparator }.map(\.text).joined(separator: "\n")
     }
 
     func copyAllInterleaved() -> String {
-        var result: [String] = []
         let finalSource = sourceLines.filter { !$0.isPartial && !$0.isSeparator }
+
+        if displayMode == .multi {
+            var result: [String] = []
+            let multiTargets = (0..<multiTargetCount).map { slot in
+                multiTargetLines[slot].filter { !$0.isPartial && !$0.isSeparator }
+            }
+            let maxCount = ([finalSource.count] + multiTargets.map(\.count)).max() ?? 0
+            for i in 0..<maxCount {
+                if i < finalSource.count {
+                    result.append(finalSource[i].text)
+                }
+                for slot in 0..<multiTargetCount {
+                    if i < multiTargets[slot].count {
+                        result.append(multiTargets[slot][i].text)
+                    }
+                }
+                result.append("")
+            }
+            return result.joined(separator: "\n")
+        }
+
+        var result: [String] = []
         let finalTarget = targetLines.filter { !$0.isPartial && !$0.isSeparator }
         let count = max(finalSource.count, finalTarget.count)
         for i in 0..<count {
