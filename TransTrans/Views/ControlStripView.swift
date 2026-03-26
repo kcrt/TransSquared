@@ -39,13 +39,13 @@ struct ControlStripView: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .disabled(viewModel.sourceLines.isEmpty && viewModel.targetLines.isEmpty)
+                .disabled(viewModel.sourceLines.isEmpty && viewModel.translationSlots[0].lines.isEmpty)
                 .help("Save Transcript (⌘S)")
 
                 IconButton(
                     icon: "trash",
                     help: "Clear History",
-                    isDisabled: viewModel.isSessionActive || (viewModel.sourceLines.isEmpty && viewModel.targetLines.isEmpty)
+                    isDisabled: viewModel.isSessionActive || (viewModel.sourceLines.isEmpty && viewModel.translationSlots[0].lines.isEmpty)
                 ) {
                     viewModel.clearHistory()
                 }

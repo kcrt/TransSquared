@@ -99,7 +99,7 @@ final class SubtitleWindowController {
     private func makeSubtitleHostingView() -> NSHostingView<SubtitleOverlayView> {
         NSHostingView(
             rootView: SubtitleOverlayView(
-                lines: viewModel?.targetLines ?? [],
+                lines: viewModel?.translationSlots.first?.lines ?? [],
                 fontSize: viewModel?.fontSize ?? 16,
                 now: Date(),
                 onDismiss: { [weak self] in self?.onDismiss?() }

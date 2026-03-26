@@ -26,7 +26,7 @@ struct ContentView: View {
                     }
                 } else {
                     TranscriptPaneView(
-                        lines: viewModel.targetLines,
+                        lines: viewModel.translationSlots[0].lines,
                         fontSize: viewModel.fontSize,
                         placeholder: viewModel.isSessionActive ? nil : String(localized: "Translation will appear here")
                     )
@@ -143,7 +143,7 @@ struct ContentView: View {
             ? Locale.current.localizedString(forIdentifier: viewModel.multiTargetLanguageIdentifiers[slot])
                 ?? viewModel.multiTargetLanguageIdentifiers[slot].uppercased()
             : "?"
-        let lines = slot < viewModel.multiTargetLines.count ? viewModel.multiTargetLines[slot] : []
+        let lines = slot < viewModel.translationSlots.count ? viewModel.translationSlots[slot].lines : []
         TranscriptPaneView(
             lines: lines,
             fontSize: viewModel.fontSize,
@@ -182,7 +182,7 @@ struct ContentView: View {
                 viewModel.saveTranscript(contentType: .both)
             }
                 .keyboardShortcut("s", modifiers: .command)
-                .disabled(viewModel.sourceLines.isEmpty && viewModel.targetLines.isEmpty)
+                .disabled(viewModel.sourceLines.isEmpty && viewModel.translationSlots[0].lines.isEmpty)
         }
         .frame(width: 0, height: 0)
         .opacity(0)
@@ -212,7 +212,7 @@ struct ContentView: View {
                 viewModel.saveTranscript(contentType: .both)
             }
         }
-        .disabled(viewModel.sourceLines.isEmpty && viewModel.targetLines.isEmpty)
+        .disabled(viewModel.sourceLines.isEmpty && viewModel.translationSlots[0].lines.isEmpty)
         Divider()
         Button("Clear History") {
             viewModel.clearHistory()

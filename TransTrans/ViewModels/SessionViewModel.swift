@@ -4,91 +4,7 @@ import Translation
 import AVFoundation
 import os
 
-/// Describes a missing permission that the user needs to grant in System Settings.
-enum PermissionIssue: Identifiable {
-    case microphone
-    case speechRecognition
-
-    var id: String {
-        switch self {
-        case .microphone: return "microphone"
-        case .speechRecognition: return "speechRecognition"
-        }
-    }
-
-    var title: String {
-        switch self {
-        case .microphone:
-            return String(localized: "Microphone Access Required")
-        case .speechRecognition:
-            return String(localized: "Speech Recognition Access Required")
-        }
-    }
-
-    var message: String {
-        switch self {
-        case .microphone:
-            return String(localized: "TransTrans needs microphone access for speech transcription. Please enable it in System Settings > Privacy & Security > Microphone.")
-        case .speechRecognition:
-            return String(localized: "TransTrans needs speech recognition access for transcription. Please enable it in System Settings > Privacy & Security > Speech Recognition.")
-        }
-    }
-}
-
 private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "Session")
-
-/// A single line of transcribed/translated text displayed in the UI.
-struct TranscriptLine: Identifiable {
-    let id = UUID()
-    var text: String
-    var isPartial: Bool
-    /// The time when this line was finalized (non-partial). Used for subtitle expiration.
-    var finalizedAt: Date?
-    /// True for visual separator lines inserted between sessions.
-    var isSeparator: Bool = false
-}
-
-extension Array where Element == TranscriptLine {
-    /// Returns only finalized, non-separator lines suitable for export.
-    var finalizedLines: [TranscriptLine] {
-        filter { !$0.isPartial && !$0.isSeparator }
-    }
-}
-
-/// Controls which panes are visible in the main content area.
-enum DisplayMode: String, CaseIterable {
-    /// Show both source (transcription) and target (translation) panes.
-    case dual
-    /// Show only the target (translation) pane in a subtitle-style overlay at the bottom of the screen.
-    case subtitle
-    /// Show source pane on top with multiple translation panes stacked below (up to 3 targets).
-    case multi
-}
-
-/// A single auto-replacement rule: when `from` appears in transcription output, replace with `to`.
-struct AutoReplacement: Codable, Identifiable, Equatable {
-    var id = UUID()
-    var from: String
-    var to: String
-}
-
-/// Encapsulates the mutable translation state for one target language slot.
-/// Used for both the single-pane target and each multi-pane target.
-struct TranslationSlot {
-    var lines: [TranscriptLine] = []
-    var queue: [(sentence: String, targetIndex: Int, isPartial: Bool)] = []
-    var partialTargetIndex: Int = -1
-    var partialTranslationTimer: Task<Void, Never>? = nil
-    var config: TranslationSession.Configuration? = nil
-
-    mutating func reset() {
-        queue = []
-        partialTargetIndex = -1
-        partialTranslationTimer?.cancel()
-        partialTranslationTimer = nil
-        config = nil
-    }
-}
 
 @Observable
 @MainActor
@@ -103,31 +19,12 @@ final class SessionViewModel {
     var isAlwaysOnTop = true
     var errorMessage: String?
     var showSettings = false
-    var displayMode: DisplayMode = {
-        if let raw = UserDefaults.standard.string(forKey: "displayMode"),
-           let mode = DisplayMode(rawValue: raw),
-           mode != .subtitle {  // Don't restore subtitle mode on launch (requires active session)
-            return mode
-        }
-        return .dual
-    }() {
-        didSet { UserDefaults.standard.set(displayMode.rawValue, forKey: "displayMode") }
-    }
+    var displayMode: DisplayMode = .dual
     var permissionIssue: PermissionIssue?
 
     /// Custom vocabulary words per source locale, keyed by locale identifier (persisted via UserDefaults).
-    var contextualStringsByLocale: [String: [String]] = {
-        guard let data = UserDefaults.standard.data(forKey: "contextualStringsByLocale"),
-              let dict = try? JSONDecoder().decode([String: [String]].self, from: data) else {
-            return [:]
-        }
-        return dict
-    }() {
-        didSet {
-            if let data = try? JSONEncoder().encode(contextualStringsByLocale) {
-                UserDefaults.standard.set(data, forKey: "contextualStringsByLocale")
-            }
-        }
+    var contextualStringsByLocale: [String: [String]] = SessionViewModel.loadFromUserDefaults(forKey: "contextualStringsByLocale") ?? [:] {
+        didSet { persistToUserDefaults(contextualStringsByLocale, forKey: "contextualStringsByLocale") }
     }
 
     /// Convenience accessor for the current source locale's vocabulary.
@@ -137,18 +34,8 @@ final class SessionViewModel {
     }
 
     /// Auto-replacement rules per source locale, keyed by locale identifier (persisted via UserDefaults).
-    var autoReplacementsByLocale: [String: [AutoReplacement]] = {
-        guard let data = UserDefaults.standard.data(forKey: "autoReplacementsByLocale"),
-              let dict = try? JSONDecoder().decode([String: [AutoReplacement]].self, from: data) else {
-            return [:]
-        }
-        return dict
-    }() {
-        didSet {
-            if let data = try? JSONEncoder().encode(autoReplacementsByLocale) {
-                UserDefaults.standard.set(data, forKey: "autoReplacementsByLocale")
-            }
-        }
+    var autoReplacementsByLocale: [String: [AutoReplacement]] = SessionViewModel.loadFromUserDefaults(forKey: "autoReplacementsByLocale") ?? [:] {
+        didSet { persistToUserDefaults(autoReplacementsByLocale, forKey: "autoReplacementsByLocale") }
     }
 
     /// Convenience accessor for the current source locale's auto-replacement rules.
@@ -175,8 +62,10 @@ final class SessionViewModel {
     var sourceLocaleIdentifier: String = UserDefaults.standard.string(forKey: "sourceLocaleIdentifier") ?? "ja_JP" {
         didSet { UserDefaults.standard.set(sourceLocaleIdentifier, forKey: "sourceLocaleIdentifier") }
     }
-    var targetLanguageIdentifier: String = UserDefaults.standard.string(forKey: "targetLanguageIdentifier") ?? "en" {
-        didSet { UserDefaults.standard.set(targetLanguageIdentifier, forKey: "targetLanguageIdentifier") }
+    /// Convenience accessor for the primary target language (slot 0 of `multiTargetLanguageIdentifiers`).
+    var targetLanguageIdentifier: String {
+        get { multiTargetLanguageIdentifiers[0] }
+        set { multiTargetLanguageIdentifiers[0] = newValue }
     }
 
     var supportedSourceLocales: [Locale] = []
@@ -199,49 +88,19 @@ final class SessionViewModel {
         didSet { UserDefaults.standard.set(multiTargetCount, forKey: "multiTargetCount") }
     }
 
-    /// Target language identifiers for multi-pane mode (up to 3 slots).
+    /// Target language identifiers (slot 0 is also the dual/subtitle target).
     var multiTargetLanguageIdentifiers: [String] = {
         if let stored = UserDefaults.standard.array(forKey: "multiTargetLanguageIdentifiers") as? [String], stored.count >= 3 {
             return stored
         }
-        return ["en", "zh-Hans", "ko"]
+        // Migration: use old single-target UserDefault for slot 0
+        let slot0 = UserDefaults.standard.string(forKey: "targetLanguageIdentifier") ?? "en"
+        return [slot0, "zh-Hans", "ko"]
     }() {
         didSet { UserDefaults.standard.set(multiTargetLanguageIdentifiers, forKey: "multiTargetLanguageIdentifiers") }
     }
 
     // MARK: - Computed Properties
-
-    /// Backward-compatible accessor for the primary (or only) target lines.
-    var targetLines: [TranscriptLine] {
-        get { translationSlots.isEmpty ? [] : translationSlots[0].lines }
-        set { if !translationSlots.isEmpty { translationSlots[0].lines = newValue } }
-    }
-
-    /// Backward-compatible accessor for multi-pane target lines.
-    var multiTargetLines: [[TranscriptLine]] {
-        get { translationSlots.map(\.lines) }
-        set {
-            for i in 0..<min(newValue.count, translationSlots.count) {
-                translationSlots[i].lines = newValue[i]
-            }
-        }
-    }
-
-    /// Backward-compatible accessor for the single-pane translation config.
-    var translationConfig: TranslationSession.Configuration? {
-        get { translationSlots.isEmpty ? nil : translationSlots[0].config }
-        set { if !translationSlots.isEmpty { translationSlots[0].config = newValue } }
-    }
-
-    /// Backward-compatible accessor for multi-pane translation configs.
-    var multiTranslationConfigs: [TranslationSession.Configuration?] {
-        get { translationSlots.map(\.config) }
-        set {
-            for i in 0..<min(newValue.count, translationSlots.count) {
-                translationSlots[i].config = newValue[i]
-            }
-        }
-    }
 
     /// Number of active translation slots based on current display mode.
     var activeSlotCount: Int {
@@ -252,31 +111,27 @@ final class SessionViewModel {
         Locale(identifier: sourceLocaleIdentifier)
     }
 
-    var targetLanguage: Locale.Language {
-        Locale.Language(identifier: targetLanguageIdentifier)
-    }
-
     /// The currently selected microphone device, or nil for system default.
     var selectedMicrophone: AVCaptureDevice? {
         if selectedMicrophoneID.isEmpty { return nil }
         return availableMicrophones.first { $0.uniqueID == selectedMicrophoneID }
     }
 
-    // MARK: - Private State
+    // MARK: - Internal State (accessed by extensions)
 
-    private let transcriptionManager = TranscriptionManager()
-    private var transcriptionTask: Task<Void, Never>?
-    private var audioLevelTask: Task<Void, Never>?
-    private var sentenceBoundaryTimer: Task<Void, Never>?
-    private var pendingSentenceBuffer = ""
-    private var sessionStartDate: Date?
-    private var segmentIndex = 0
+    let transcriptionManager = TranscriptionManager()
+    var transcriptionTask: Task<Void, Never>?
+    var audioLevelTask: Task<Void, Never>?
+    var sentenceBoundaryTimer: Task<Void, Never>?
+    var pendingSentenceBuffer = ""
+    var sessionStartDate: Date?
+    var segmentIndex = 0
 
-    private static let partialTranslationDebounce: UInt64 = 300_000_000 // 0.3 seconds
+    static let partialTranslationDebounce: UInt64 = 300_000_000 // 0.3 seconds
 
     // Sentence-ending punctuation characters
-    private static let sentenceEndChars: Set<Character> = [".", "。", "!", "?", "！", "？"]
-    private static let sentenceBoundaryTimeout: UInt64 = 3_000_000_000 // 3 seconds in nanoseconds
+    static let sentenceEndChars: Set<Character> = [".", "。", "!", "?", "！", "？"]
+    static let sentenceBoundaryTimeout: UInt64 = 3_000_000_000 // 3 seconds in nanoseconds
 
     // MARK: - Lifecycle
 
@@ -417,12 +272,7 @@ final class SessionViewModel {
             if i < previousSlots.count {
                 slot.lines = previousSlots[i].lines
             }
-            let targetLang: Locale.Language
-            if displayMode == .multi {
-                targetLang = Locale.Language(identifier: multiTargetLanguageIdentifiers[i])
-            } else {
-                targetLang = targetLanguage
-            }
+            let targetLang = Locale.Language(identifier: multiTargetLanguageIdentifiers[i])
             slot.config = TranslationSession.Configuration(
                 source: sourceLocale.language,
                 target: targetLang
@@ -493,7 +343,7 @@ final class SessionViewModel {
             translationSlots[slot].reset()
         }
         audioLevels = Array(repeating: 0, count: 20)
-        logger.info("Session stopped (source lines: \(self.sourceLines.count), target lines: \(self.targetLines.count))")
+        logger.info("Session stopped (source lines: \(self.sourceLines.count), target lines: \(self.translationSlots[0].lines.count))")
     }
 
     func toggleSession() {
@@ -634,328 +484,16 @@ final class SessionViewModel {
         }
     }
 
-    // MARK: - Translation Callback
+    // MARK: - UserDefaults Helpers
 
-    /// Called from the `.translationTask()` view modifier when a session is available for a given slot.
-    func handleTranslationSession(_ session: TranslationSession, slot: Int) async {
-        guard slot >= 0 && slot < translationSlots.count else { return }
-        logger.info("Translation session available for slot \(slot), queued: \(self.translationSlots[slot].queue.count)")
-
-        // Process queued translations using the session provided by the closure.
-        // Do NOT store the session — it is only valid within this closure scope.
-        // Re-check bounds after each await since translationSlots may be rebuilt.
-        while slot < translationSlots.count && !translationSlots[slot].queue.isEmpty {
-            let item = translationSlots[slot].queue.removeFirst()
-            await translateSentence(item.sentence, using: session, slot: slot, targetIndex: item.targetIndex, isPartial: item.isPartial)
-        }
+    private static func loadFromUserDefaults<T: Codable>(forKey key: String) -> T? {
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
     }
 
-    // MARK: - Multi-Pane Target Management
-
-    func addMultiTarget() {
-        guard multiTargetCount < Self.maxMultiTargetCount else { return }
-        multiTargetCount += 1
-        // Pick a default language not already selected
-        let used = Set(multiTargetLanguageIdentifiers.prefix(multiTargetCount - 1))
-        if let available = supportedTargetLanguages.first(where: { !used.contains($0.minimalIdentifier) }) {
-            if multiTargetLanguageIdentifiers.count < multiTargetCount {
-                multiTargetLanguageIdentifiers.append(available.minimalIdentifier)
-            } else {
-                multiTargetLanguageIdentifiers[multiTargetCount - 1] = available.minimalIdentifier
-            }
+    private func persistToUserDefaults<T: Codable>(_ value: T, forKey key: String) {
+        if let data = try? JSONEncoder().encode(value) {
+            UserDefaults.standard.set(data, forKey: key)
         }
-    }
-
-    func removeMultiTarget() {
-        guard multiTargetCount > 2 else { return }
-        multiTargetCount -= 1
-    }
-
-    // MARK: - Private Methods
-
-    private func handleTranscriptionEvent(_ event: TranscriptionEvent) {
-        switch event {
-        case .partial(let rawText):
-            let text = applyAutoReplacements(rawText)
-            logger.debug("Event: partial \"\(rawText)\" → \"\(text)\"")
-            // Remove old partial line and add new one
-            if let lastIndex = sourceLines.indices.last, sourceLines[lastIndex].isPartial {
-                sourceLines[lastIndex] = TranscriptLine(text: text, isPartial: true)
-            } else {
-                sourceLines.append(TranscriptLine(text: text, isPartial: true))
-            }
-
-            // Request partial translation (debounced)
-            requestPartialTranslation(for: pendingSentenceBuffer + text)
-
-        case .final_(let rawText):
-            let text = applyAutoReplacements(rawText)
-            logger.info("Event: final \"\(rawText)\" → \"\(text)\"")
-            // Cancel any pending partial translation timers
-            for slot in 0..<translationSlots.count {
-                translationSlots[slot].partialTranslationTimer?.cancel()
-                translationSlots[slot].partialTranslationTimer = nil
-            }
-
-            // Remove partial line if present
-            if let lastIndex = sourceLines.indices.last, sourceLines[lastIndex].isPartial {
-                sourceLines.removeLast()
-            }
-
-            // Append finalized text
-            sourceLines.append(TranscriptLine(text: text, isPartial: false))
-
-            // Add to sentence buffer and check for boundaries
-            pendingSentenceBuffer += text
-            checkSentenceBoundary()
-
-        case .error(let message):
-            logger.error("Event: error \"\(message)\"")
-            errorMessage = message
-        }
-    }
-
-    private func checkSentenceBoundary() {
-        // Check if the buffer ends with sentence-ending punctuation
-        if let lastChar = pendingSentenceBuffer.last, Self.sentenceEndChars.contains(lastChar) {
-            let sentence = pendingSentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
-            pendingSentenceBuffer = ""
-            commitSentence(sentence)
-        } else {
-            // Reset the silence timer
-            resetSentenceBoundaryTimer()
-        }
-    }
-
-    private func resetSentenceBoundaryTimer() {
-        sentenceBoundaryTimer?.cancel()
-        sentenceBoundaryTimer = Task {
-            try? await Task.sleep(nanoseconds: Self.sentenceBoundaryTimeout)
-            guard !Task.isCancelled else { return }
-            if !pendingSentenceBuffer.isEmpty {
-                let sentence = pendingSentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
-                pendingSentenceBuffer = ""
-                commitSentence(sentence)
-            }
-        }
-    }
-
-    private func requestPartialTranslation(for text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        for slot in 0..<activeSlotCount {
-            requestPartialTranslationForSlot(slot, text: trimmed)
-        }
-    }
-
-    private func requestPartialTranslationForSlot(_ slot: Int, text: String) {
-        guard slot < translationSlots.count else { return }
-        translationSlots[slot].partialTranslationTimer?.cancel()
-        let capturedSlot = slot
-        translationSlots[slot].partialTranslationTimer = Task {
-            try? await Task.sleep(nanoseconds: Self.partialTranslationDebounce)
-            guard !Task.isCancelled, capturedSlot < translationSlots.count else { return }
-
-            // Create or update the partial target line
-            let pIdx = translationSlots[capturedSlot].partialTargetIndex
-            if pIdx >= 0 && pIdx < translationSlots[capturedSlot].lines.count
-                && translationSlots[capturedSlot].lines[pIdx].isPartial {
-                // Reuse existing partial line
-            } else {
-                translationSlots[capturedSlot].lines.append(TranscriptLine(text: "…", isPartial: true))
-                translationSlots[capturedSlot].partialTargetIndex = translationSlots[capturedSlot].lines.count - 1
-            }
-
-            let idx = translationSlots[capturedSlot].partialTargetIndex
-            logger.debug("Queuing partial translation slot \(capturedSlot) (targetIndex: \(idx)): \"\(text)\"")
-            translationSlots[capturedSlot].queue.append((sentence: text, targetIndex: idx, isPartial: true))
-            translationSlots[capturedSlot].config?.invalidate()
-        }
-    }
-
-    private func commitSentence(_ sentence: String) {
-        guard !sentence.isEmpty else { return }
-
-        segmentIndex += 1
-        logger.info("Committing sentence #\(self.segmentIndex): \"\(sentence)\"")
-
-        for slot in 0..<activeSlotCount {
-            commitSentenceForSlot(slot, sentence: sentence)
-        }
-    }
-
-    private func commitSentenceForSlot(_ slot: Int, sentence: String) {
-        guard slot < translationSlots.count else { return }
-        translationSlots[slot].partialTranslationTimer?.cancel()
-        translationSlots[slot].partialTranslationTimer = nil
-
-        let pIdx = translationSlots[slot].partialTargetIndex
-        if pIdx >= 0 && pIdx < translationSlots[slot].lines.count
-            && translationSlots[slot].lines[pIdx].isPartial {
-            // Reuse the partial line as placeholder for the final translation
-            let targetIndex = pIdx
-            translationSlots[slot].partialTargetIndex = -1
-            logger.debug("Reusing partial line for final translation (slot: \(slot), targetIndex: \(targetIndex))")
-            translationSlots[slot].queue.append((sentence: sentence, targetIndex: targetIndex, isPartial: false))
-            translationSlots[slot].config?.invalidate()
-        } else {
-            // Add placeholder to target pane
-            translationSlots[slot].lines.append(TranscriptLine(text: "…", isPartial: true))
-            let targetIndex = translationSlots[slot].lines.count - 1
-            translationSlots[slot].partialTargetIndex = -1
-            logger.debug("Queuing for translation (slot: \(slot), targetIndex: \(targetIndex))")
-            translationSlots[slot].queue.append((sentence: sentence, targetIndex: targetIndex, isPartial: false))
-            translationSlots[slot].config?.invalidate()
-        }
-    }
-
-    private func translateSentence(_ sentence: String, using session: TranslationSession, slot: Int, targetIndex: Int, isPartial: Bool) async {
-        logger.debug("Translating slot \(slot) (\(isPartial ? "partial" : "final")): \"\(sentence)\"")
-        do {
-            let response = try await session.translate(sentence)
-            logger.info("Slot \(slot) translation result (\(isPartial ? "partial" : "final")): \"\(response.targetText)\"")
-            // Re-check slot bounds after await since translationSlots may have been rebuilt
-            guard slot < translationSlots.count,
-                  targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count else { return }
-            // For partial translations, only update if the line is still partial
-            // (a final translation may have already replaced it)
-            if isPartial {
-                if translationSlots[slot].lines[targetIndex].isPartial {
-                    translationSlots[slot].lines[targetIndex] = TranscriptLine(text: response.targetText, isPartial: true)
-                }
-            } else {
-                translationSlots[slot].lines[targetIndex] = TranscriptLine(text: response.targetText, isPartial: false, finalizedAt: Date())
-            }
-        } catch {
-            logger.error("Slot \(slot) translation failed: \(error.localizedDescription)")
-            // Only show error for final translations; silently ignore partial failures
-            if !isPartial {
-                if slot < translationSlots.count,
-                   targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count {
-                    translationSlots[slot].lines[targetIndex] = TranscriptLine(text: "[Translation failed]", isPartial: false, finalizedAt: Date())
-                }
-            }
-        }
-    }
-
-    // MARK: - Save / Export
-
-    enum SaveContentType {
-        case original
-        case translation
-        case both
-    }
-
-    /// Presents an NSSavePanel and writes the selected content to a text file.
-    func saveTranscript(contentType: SaveContentType) {
-        let content: String
-        switch contentType {
-        case .original:
-            content = copyAllOriginal()
-        case .translation:
-            content = copyAllTranslation()
-        case .both:
-            content = copyAllInterleaved()
-        }
-
-        guard !content.isEmpty else { return }
-
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = defaultFileName(for: contentType)
-        panel.canCreateDirectories = true
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            try content.write(to: url, atomically: true, encoding: .utf8)
-            logger.info("Transcript saved to \(url.path)")
-        } catch {
-            logger.error("Failed to save transcript: \(error.localizedDescription)")
-            errorMessage = "Failed to save: \(error.localizedDescription)"
-        }
-    }
-
-    private func defaultFileName(for contentType: SaveContentType) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let timestamp = formatter.string(from: Date())
-        let suffix: String
-        switch contentType {
-        case .original: suffix = "original"
-        case .translation: suffix = "translation"
-        case .both: suffix = "interleaved"
-        }
-        return "TransTrans_\(timestamp)_\(suffix).txt"
-    }
-
-    // MARK: - Copy / Export Helpers
-
-    func clearHistory() {
-        sourceLines = []
-        for slot in 0..<translationSlots.count {
-            translationSlots[slot].lines = []
-        }
-    }
-
-    func copyAllOriginal() -> String {
-        sourceLines.finalizedLines.map(\.text).joined(separator: "\n")
-    }
-
-    func copyAllTranslation() -> String {
-        if displayMode == .multi {
-            var result: [String] = []
-            let targets = multiTargetLines
-            for slot in 0..<min(multiTargetCount, targets.count) {
-                let langId = slot < multiTargetLanguageIdentifiers.count
-                    ? multiTargetLanguageIdentifiers[slot].uppercased() : "?"
-                result.append("[\(langId)]")
-                result.append(contentsOf: targets[slot].finalizedLines.map(\.text))
-                result.append("")
-            }
-            return result.joined(separator: "\n")
-        }
-        return targetLines.finalizedLines.map(\.text).joined(separator: "\n")
-    }
-
-    func copyAllInterleaved() -> String {
-        let finalSource = sourceLines.finalizedLines
-
-        if displayMode == .multi {
-            var result: [String] = []
-            let targets = multiTargetLines
-            let safeCount = min(multiTargetCount, targets.count)
-            let multiTargets = (0..<safeCount).map { slot in
-                targets[slot].finalizedLines
-            }
-            let maxCount = ([finalSource.count] + multiTargets.map(\.count)).max() ?? 0
-            for i in 0..<maxCount {
-                if i < finalSource.count {
-                    result.append(finalSource[i].text)
-                }
-                for slot in 0..<safeCount {
-                    if i < multiTargets[slot].count {
-                        result.append(multiTargets[slot][i].text)
-                    }
-                }
-                result.append("")
-            }
-            return result.joined(separator: "\n")
-        }
-
-        var result: [String] = []
-        let finalTarget = targetLines.finalizedLines
-        let count = max(finalSource.count, finalTarget.count)
-        for i in 0..<count {
-            if i < finalSource.count {
-                result.append(finalSource[i].text)
-            }
-            if i < finalTarget.count {
-                result.append(finalTarget[i].text)
-            }
-            result.append("")
-        }
-        return result.joined(separator: "\n")
     }
 }
