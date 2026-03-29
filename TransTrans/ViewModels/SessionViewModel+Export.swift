@@ -14,7 +14,8 @@ extension SessionViewModel {
         case both
     }
 
-    /// Presents an NSSavePanel and writes the selected content to a text file.
+    /// Prepares transcript content for export via SwiftUI's `.fileExporter`.
+    /// The actual file-save dialog is presented by the View layer.
     func saveTranscript(contentType: SaveContentType) {
         let content: String
         switch contentType {
@@ -28,20 +29,9 @@ extension SessionViewModel {
 
         guard !content.isEmpty else { return }
 
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.plainText]
-        panel.nameFieldStringValue = defaultFileName(for: contentType)
-        panel.canCreateDirectories = true
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            try content.write(to: url, atomically: true, encoding: .utf8)
-            logger.info("Transcript saved to \(url.path)")
-        } catch {
-            logger.error("Failed to save transcript: \(error.localizedDescription)")
-            errorMessage = "Failed to save: \(error.localizedDescription)"
-        }
+        exportContent = content
+        exportDefaultFilename = defaultFileName(for: contentType)
+        isExporterPresented = true
     }
 
     private func defaultFileName(for contentType: SaveContentType) -> String {

@@ -22,6 +22,11 @@ final class SessionViewModel {
     var displayMode: DisplayMode = .dual
     var permissionIssue: PermissionIssue?
 
+    // MARK: - File Export State
+    var isExporterPresented = false
+    var exportContent: String?
+    var exportDefaultFilename = ""
+
     /// Custom vocabulary words per source locale, keyed by locale identifier (persisted via UserDefaults).
     var contextualStringsByLocale: [String: [String]] = SessionViewModel.loadFromUserDefaults(forKey: "contextualStringsByLocale") ?? [:] {
         didSet { persistToUserDefaults(contextualStringsByLocale, forKey: "contextualStringsByLocale") }

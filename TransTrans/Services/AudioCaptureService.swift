@@ -33,8 +33,7 @@ final class AudioCaptureService {
             logger.warning("Audio device has no format descriptions")
             return nil
         }
-        let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(first)
-        guard let basicDesc = asbd?.pointee, basicDesc.mSampleRate > 0, basicDesc.mChannelsPerFrame > 0 else {
+        guard let basicDesc = first.audioStreamBasicDescription, basicDesc.mSampleRate > 0, basicDesc.mChannelsPerFrame > 0 else {
             logger.warning("Audio device format has invalid sample rate or channel count")
             return nil
         }
@@ -170,17 +169,16 @@ private final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSamp
     ) {
         bufferCount += 1
 
-        guard let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) else {
+        guard let formatDesc = sampleBuffer.formatDescription else {
             logger.warning("Sample buffer has no format description")
             return
         }
-        let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc)
-        guard let basicDesc = asbd?.pointee else {
+        guard let basicDesc = formatDesc.audioStreamBasicDescription else {
             logger.warning("Cannot read ASBD from format description")
             return
         }
 
-        let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
+        let frameCount = sampleBuffer.numSamples
         guard frameCount > 0 else {
             logger.debug("Empty sample buffer received")
             return
@@ -416,7 +414,7 @@ extension AVAudioPCMBuffer {
             return nil
         }
 
-        return sqrtf(sumOfSquares / Float(count))
+        return sqrt(sumOfSquares / Float(count))
     }
 
     /// Generic sum-of-squares computation over integer or float samples.

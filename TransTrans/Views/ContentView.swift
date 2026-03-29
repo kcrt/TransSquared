@@ -1,5 +1,6 @@
 import SwiftUI
 import Translation
+import UniformTypeIdentifiers
 import os
 
 private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "ContentView")
@@ -38,7 +39,7 @@ struct ContentView: View {
             // Right control strip
             ControlStripView(viewModel: viewModel)
         }
-        .background(VisualEffectBackground(material: .hudWindow))
+        .glassEffect(.regular, in: .rect)
         .frame(minWidth: 320, minHeight: viewModel.displayMode == .multi ? 320 : 200)
         .translationTask(viewModel.translationSlots.indices.contains(0) ? viewModel.translationSlots[0].config : nil) { session in
             await viewModel.handleTranslationSession(session, slot: 0)
@@ -101,6 +102,20 @@ struct ContentView: View {
         }
         .sheet(isPresented: $viewModel.showSettings) {
             SettingsView(viewModel: viewModel)
+        }
+        .fileExporter(
+            isPresented: $viewModel.isExporterPresented,
+            item: viewModel.exportContent,
+            contentTypes: [.plainText],
+            defaultFilename: viewModel.exportDefaultFilename
+        ) { result in
+            switch result {
+            case .success(let url):
+                logger.info("Transcript exported to \(url.path)")
+            case .failure(let error):
+                logger.error("Failed to export transcript: \(error.localizedDescription)")
+                viewModel.errorMessage = "Failed to save: \(error.localizedDescription)"
+            }
         }
         .alert("Error", isPresented: showErrorBinding) {
             Button("OK") { viewModel.errorMessage = nil }
