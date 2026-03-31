@@ -1,5 +1,15 @@
 import SwiftUI
 import Translation
+import os
+
+// MARK: - Centralized Logger
+
+extension Logger {
+    /// Creates a Logger scoped to the TransTrans app with the given category.
+    static func app(_ category: String) -> Logger {
+        Logger(subsystem: "net.kcrt.app.transtrans", category: category)
+    }
+}
 
 /// Describes a missing permission that the user needs to grant in System Settings.
 enum PermissionIssue: Identifiable {
@@ -74,6 +84,31 @@ struct TranslationSlot {
     var partialTargetIndex: Int = -1
     var partialTranslationTimer: Task<Void, Never>? = nil
     var config: TranslationSession.Configuration? = nil
+
+    /// Ensures a placeholder line exists for the translation, enqueues the sentence, and invalidates config.
+    /// If `reusePartial` is true and a valid partial line exists, it is reused; otherwise a new placeholder is appended.
+    /// Returns the target line index used.
+    @discardableResult
+    mutating func enqueueTranslation(sentence: String, isPartial: Bool, resetPartialIndex: Bool = false) -> Int {
+        let pIdx = partialTargetIndex
+        let hasExistingPartial = pIdx >= 0 && pIdx < lines.count && lines[pIdx].isPartial
+
+        let targetIndex: Int
+        if hasExistingPartial {
+            targetIndex = pIdx
+        } else {
+            lines.append(TranscriptLine(text: "…", isPartial: true))
+            targetIndex = lines.count - 1
+        }
+
+        if !hasExistingPartial || resetPartialIndex {
+            partialTargetIndex = resetPartialIndex ? -1 : targetIndex
+        }
+
+        queue.append((sentence: sentence, targetIndex: targetIndex, isPartial: isPartial))
+        config?.invalidate()
+        return targetIndex
+    }
 
     mutating func reset() {
         queue = []

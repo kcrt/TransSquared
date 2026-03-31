@@ -9,7 +9,7 @@ enum TranscriptionEvent: Sendable {
 }
 
 actor TranscriptionManager {
-    private nonisolated let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "Transcription")
+    private nonisolated let logger = Logger.app("Transcription")
     private var analyzer: SpeechAnalyzer?
     private var transcriber: SpeechTranscriber?
     private var audioCaptureService: AudioCaptureService?

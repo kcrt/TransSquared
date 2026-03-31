@@ -3,7 +3,7 @@ import AVFoundation
 import UniformTypeIdentifiers
 import os
 
-private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "ControlStrip")
+private let logger = Logger.app("ControlStrip")
 
 struct ControlStripView: View {
     @Bindable var viewModel: SessionViewModel
@@ -22,15 +22,7 @@ struct ControlStripView: View {
                 Spacer()
 
                 Menu {
-                    Button("Original") {
-                        viewModel.saveTranscript(contentType: .original)
-                    }
-                    Button("Translation") {
-                        viewModel.saveTranscript(contentType: .translation)
-                    }
-                    Button("Both (Interleaved)") {
-                        viewModel.saveTranscript(contentType: .both)
-                    }
+                    SaveTranscriptMenuItems(viewModel: viewModel)
                 } label: {
                     Image(systemName: "square.and.arrow.down")
                         .font(.title3)
@@ -39,24 +31,20 @@ struct ControlStripView: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .disabled(viewModel.sourceLines.isEmpty && viewModel.translationSlots[0].lines.isEmpty)
+                .disabled(!viewModel.hasTranscriptContent)
                 .help("Save Transcript (⌘S)")
 
                 IconButton(
                     icon: "trash",
                     help: "Clear History",
-                    isDisabled: viewModel.isSessionActive || (viewModel.sourceLines.isEmpty && viewModel.translationSlots[0].lines.isEmpty)
+                    isDisabled: viewModel.isSessionActive || !viewModel.hasTranscriptContent
                 ) {
                     viewModel.clearHistory()
                 }
 
                 // Toggle: Normal ↔ Subtitle
                 Button {
-                    if viewModel.displayMode == .subtitle {
-                        viewModel.displayMode = .normal
-                    } else {
-                        viewModel.displayMode = .subtitle
-                    }
+                    viewModel.toggleDisplayMode()
                 } label: {
                     Image(systemName: viewModel.displayMode == .subtitle ? "captions.bubble.fill" : "captions.bubble")
                         .font(.title3)
@@ -253,6 +241,25 @@ struct ControlStripView: View {
         .help("Target Language \(slot + 1)")
     }
 }
+// MARK: - Save Transcript Menu Items (shared between context menu and control strip)
+
+/// Reusable menu content for save transcript actions.
+struct SaveTranscriptMenuItems: View {
+    let viewModel: SessionViewModel
+
+    var body: some View {
+        Button("Original") {
+            viewModel.saveTranscript(contentType: .original)
+        }
+        Button("Translation") {
+            viewModel.saveTranscript(contentType: .translation)
+        }
+        Button("Both (Interleaved)") {
+            viewModel.saveTranscript(contentType: .both)
+        }
+    }
+}
+
 // MARK: - Icon Button
 
 /// A plain icon button with consistent styling used throughout the control strip.

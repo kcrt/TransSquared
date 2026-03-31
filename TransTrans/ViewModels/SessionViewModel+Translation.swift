@@ -2,7 +2,7 @@ import Foundation
 import Translation
 import os
 
-private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "Translation")
+private let logger = Logger.app("Translation")
 
 // MARK: - Translation Processing
 
@@ -120,7 +120,7 @@ extension SessionViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        for slot in 0..<activeSlotCount {
+        for slot in 0..<targetCount {
             requestPartialTranslationForSlot(slot, text: trimmed)
         }
     }
@@ -133,20 +133,8 @@ extension SessionViewModel {
             try? await Task.sleep(nanoseconds: Self.partialTranslationDebounce)
             guard !Task.isCancelled, capturedSlot < translationSlots.count else { return }
 
-            // Create or update the partial target line
-            let pIdx = translationSlots[capturedSlot].partialTargetIndex
-            if pIdx >= 0 && pIdx < translationSlots[capturedSlot].lines.count
-                && translationSlots[capturedSlot].lines[pIdx].isPartial {
-                // Reuse existing partial line
-            } else {
-                translationSlots[capturedSlot].lines.append(TranscriptLine(text: "…", isPartial: true))
-                translationSlots[capturedSlot].partialTargetIndex = translationSlots[capturedSlot].lines.count - 1
-            }
-
-            let idx = translationSlots[capturedSlot].partialTargetIndex
+            let idx = translationSlots[capturedSlot].enqueueTranslation(sentence: text, isPartial: true)
             logger.debug("Queuing partial translation slot \(capturedSlot) (targetIndex: \(idx)): \"\(text)\"")
-            translationSlots[capturedSlot].queue.append((sentence: text, targetIndex: idx, isPartial: true))
-            translationSlots[capturedSlot].config?.invalidate()
         }
     }
 
@@ -156,7 +144,7 @@ extension SessionViewModel {
         segmentIndex += 1
         logger.info("Committing sentence #\(self.segmentIndex): \"\(sentence)\"")
 
-        for slot in 0..<activeSlotCount {
+        for slot in 0..<targetCount {
             commitSentenceForSlot(slot, sentence: sentence)
         }
     }
@@ -166,24 +154,8 @@ extension SessionViewModel {
         translationSlots[slot].partialTranslationTimer?.cancel()
         translationSlots[slot].partialTranslationTimer = nil
 
-        let pIdx = translationSlots[slot].partialTargetIndex
-        if pIdx >= 0 && pIdx < translationSlots[slot].lines.count
-            && translationSlots[slot].lines[pIdx].isPartial {
-            // Reuse the partial line as placeholder for the final translation
-            let targetIndex = pIdx
-            translationSlots[slot].partialTargetIndex = -1
-            logger.debug("Reusing partial line for final translation (slot: \(slot), targetIndex: \(targetIndex))")
-            translationSlots[slot].queue.append((sentence: sentence, targetIndex: targetIndex, isPartial: false))
-            translationSlots[slot].config?.invalidate()
-        } else {
-            // Add placeholder to target pane
-            translationSlots[slot].lines.append(TranscriptLine(text: "…", isPartial: true))
-            let targetIndex = translationSlots[slot].lines.count - 1
-            translationSlots[slot].partialTargetIndex = -1
-            logger.debug("Queuing for translation (slot: \(slot), targetIndex: \(targetIndex))")
-            translationSlots[slot].queue.append((sentence: sentence, targetIndex: targetIndex, isPartial: false))
-            translationSlots[slot].config?.invalidate()
-        }
+        let idx = translationSlots[slot].enqueueTranslation(sentence: sentence, isPartial: false, resetPartialIndex: true)
+        logger.debug("Queuing for translation (slot: \(slot), targetIndex: \(idx))")
     }
 
     private func translateSentence(_ sentence: String, using session: TranslationSession, slot: Int, targetIndex: Int, isPartial: Bool) async {

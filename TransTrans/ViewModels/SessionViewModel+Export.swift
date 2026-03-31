@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import os
 
-private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "Export")
+private let logger = Logger.app("Export")
 
 // MARK: - Save / Export
 
@@ -61,7 +61,7 @@ extension SessionViewModel {
     }
 
     func copyAllTranslation() -> String {
-        let slotCount = min(activeSlotCount, translationSlots.count)
+        let slotCount = min(targetCount, translationSlots.count)
         if slotCount > 1 {
             var result: [String] = []
             for slot in 0..<slotCount {
@@ -78,7 +78,7 @@ extension SessionViewModel {
 
     func copyAllInterleaved() -> String {
         let finalSource = sourceLines.finalizedLines
-        let slotCount = min(activeSlotCount, translationSlots.count)
+        let slotCount = min(targetCount, translationSlots.count)
         let slotLines = (0..<slotCount).map { translationSlots[$0].lines.finalizedLines }
         let maxCount = ([finalSource.count] + slotLines.map(\.count)).max() ?? 0
 

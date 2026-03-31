@@ -3,7 +3,7 @@ import Translation
 import UniformTypeIdentifiers
 import os
 
-private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "ContentView")
+private let logger = Logger.app("ContentView")
 
 struct ContentView: View {
     @State private var viewModel = SessionViewModel()
@@ -177,18 +177,14 @@ struct ContentView: View {
             Button("Pin") { viewModel.isAlwaysOnTop.toggle() }
                 .keyboardShortcut("t", modifiers: .command)
             Button("SubtitleMode") {
-                if viewModel.displayMode == .subtitle {
-                    viewModel.displayMode = .normal
-                } else if viewModel.isSessionActive {
-                    viewModel.displayMode = .subtitle
-                }
+                viewModel.toggleDisplayMode()
             }
                 .keyboardShortcut("d", modifiers: .command)
             Button("Save") {
                 viewModel.saveTranscript(contentType: .both)
             }
                 .keyboardShortcut("s", modifiers: .command)
-                .disabled(viewModel.sourceLines.isEmpty && viewModel.translationSlots[0].lines.isEmpty)
+                .disabled(!viewModel.hasTranscriptContent)
         }
         .frame(width: 0, height: 0)
         .opacity(0)
@@ -208,17 +204,9 @@ struct ContentView: View {
         }
         Divider()
         Menu("Save Transcript") {
-            Button("Original") {
-                viewModel.saveTranscript(contentType: .original)
-            }
-            Button("Translation") {
-                viewModel.saveTranscript(contentType: .translation)
-            }
-            Button("Both (Interleaved)") {
-                viewModel.saveTranscript(contentType: .both)
-            }
+            SaveTranscriptMenuItems(viewModel: viewModel)
         }
-        .disabled(viewModel.sourceLines.isEmpty && viewModel.translationSlots[0].lines.isEmpty)
+        .disabled(!viewModel.hasTranscriptContent)
         Divider()
         Button("Clear History") {
             viewModel.clearHistory()

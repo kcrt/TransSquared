@@ -3,7 +3,7 @@ import CoreMedia
 import Speech
 import os
 
-private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "AudioCapture")
+private let logger = Logger.app("AudioCapture")
 
 /// Captures microphone audio using AVCaptureSession and produces an AsyncStream of AnalyzerInput.
 /// This approach works around a known macOS 26 regression (FB19024508) where AVAudioEngine

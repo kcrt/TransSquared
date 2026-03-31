@@ -4,7 +4,7 @@ import Translation
 import AVFoundation
 import os
 
-private let logger = Logger(subsystem: "net.kcrt.app.transtrans", category: "Session")
+private let logger = Logger.app("Session")
 
 @Observable
 @MainActor
@@ -115,9 +115,9 @@ final class SessionViewModel {
 
     // MARK: - Computed Properties
 
-    /// Number of active translation slots (always matches `targetCount`).
-    var activeSlotCount: Int {
-        targetCount
+    /// Whether there is any transcript content (source or translation) to export or clear.
+    var hasTranscriptContent: Bool {
+        !sourceLines.isEmpty || !translationSlots[0].lines.isEmpty
     }
 
     var sourceLocale: Locale {
@@ -317,7 +317,7 @@ final class SessionViewModel {
         sessionStartDate = Date()
 
         // Initialize translation slots based on display mode
-        let slotCount = activeSlotCount
+        let slotCount = targetCount
         let previousSlots = translationSlots
         translationSlots = (0..<slotCount).map { i in
             var slot = TranslationSlot()
@@ -527,6 +527,18 @@ final class SessionViewModel {
             ?? candidates.first(where: { $0.region == nil })
             ?? candidates.first(where: { $0.region == likely })
             ?? candidates.first
+    }
+
+    // MARK: - Font Size
+
+    // MARK: - Display Mode
+
+    func toggleDisplayMode() {
+        if displayMode == .subtitle {
+            displayMode = .normal
+        } else if isSessionActive {
+            displayMode = .subtitle
+        }
     }
 
     // MARK: - Font Size
