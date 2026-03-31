@@ -347,7 +347,7 @@ struct ExportTests {
 
     @Test func copyAllTranslationSingleSlot() {
         let vm = SessionViewModel()
-        vm.displayMode = .dual
+        vm.displayMode = .normal
         vm.translationSlots = [TranslationSlot()]
         vm.translationSlots[0].lines = [
             TranscriptLine(text: "Translated 1", isPartial: false),
@@ -359,9 +359,8 @@ struct ExportTests {
 
     @Test func copyAllTranslationMultiSlotWithHeaders() {
         let vm = SessionViewModel()
-        vm.displayMode = .multi
-        vm.multiTargetCount = 2
-        vm.multiTargetLanguageIdentifiers = ["en", "zh-Hans", "ko"]
+        vm.targetCount = 2
+        vm.targetLanguageIdentifiers = ["en", "zh-Hans", "ko"]
         vm.translationSlots = [TranslationSlot(), TranslationSlot()]
         vm.translationSlots[0].lines = [
             TranscriptLine(text: "English line", isPartial: false),
@@ -378,7 +377,6 @@ struct ExportTests {
 
     @Test func copyAllInterleavedFormat() {
         let vm = SessionViewModel()
-        vm.displayMode = .dual
         vm.sourceLines = [
             TranscriptLine(text: "Source 1", isPartial: false),
             TranscriptLine(text: "Source 2", isPartial: false),

@@ -50,14 +50,13 @@ extension Array where Element == TranscriptLine {
     }
 }
 
-/// Controls which panes are visible in the main content area.
+/// Controls the display style of the main content area.
+/// The number of translation panes is determined by `targetCount`, not by the display mode.
 enum DisplayMode: String, CaseIterable {
-    /// Show both source (transcription) and target (translation) panes.
-    case dual
-    /// Show only the target (translation) pane in a subtitle-style overlay at the bottom of the screen.
+    /// Show source pane and translation pane(s) in the main window.
+    case normal
+    /// Show only the primary translation in a subtitle-style overlay at the bottom of the screen.
     case subtitle
-    /// Show source pane on top with multiple translation panes stacked below (up to 3 targets).
-    case multi
 }
 
 /// A single auto-replacement rule: when `from` appears in transcription output, replace with `to`.

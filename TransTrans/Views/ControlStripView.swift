@@ -50,23 +50,11 @@ struct ControlStripView: View {
                     viewModel.clearHistory()
                 }
 
-                // Toggle: Single (dual) ↔ Multi pane
-                Button {
-                    viewModel.displayMode = viewModel.displayMode == .multi ? .dual : .multi
-                } label: {
-                    Image(systemName: "rectangle.grid.1x3")
-                        .font(.title3)
-                        .foregroundStyle(viewModel.displayMode == .multi ? Color.accentColor : .secondary)
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isSessionActive)
-                .help(viewModel.displayMode == .multi ? "Single Pane (⌘M)" : "Multi Pane (⌘M)")
-
-                // Toggle: Single (dual) ↔ Subtitle
+                // Toggle: Normal ↔ Subtitle
                 Button {
                     if viewModel.displayMode == .subtitle {
-                        viewModel.displayMode = .dual
-                    } else if viewModel.displayMode == .dual {
+                        viewModel.displayMode = .normal
+                    } else {
                         viewModel.displayMode = .subtitle
                     }
                 } label: {
@@ -75,8 +63,8 @@ struct ControlStripView: View {
                         .foregroundStyle(viewModel.displayMode == .subtitle ? Color.accentColor : .secondary)
                 }
                 .buttonStyle(.plain)
-                .disabled(viewModel.displayMode == .multi || (!viewModel.isSessionActive && viewModel.displayMode != .subtitle))
-                .help(viewModel.displayMode == .subtitle ? "Single Pane (⌘D)" : "Subtitle Mode (⌘D)")
+                .disabled(!viewModel.isSessionActive && viewModel.displayMode != .subtitle)
+                .help(viewModel.displayMode == .subtitle ? "Normal Mode (⌘D)" : "Subtitle Mode (⌘D)")
 
                 IconButton(icon: "gearshape.fill", help: "Settings") {
                     viewModel.showSettings.toggle()
@@ -164,43 +152,8 @@ struct ControlStripView: View {
                 .disabled(viewModel.isSessionActive)
                 .help("Source Language")
 
-                if viewModel.displayMode == .multi {
-                    // Multi-pane: multiple target language pickers
-                    Divider()
-
-                    ForEach(0..<viewModel.multiTargetCount, id: \.self) { slot in
-                        multiTargetPicker(slot: slot)
-                    }
-
-                    // Add/remove target buttons
-                    HStack(spacing: 4) {
-                        if viewModel.multiTargetCount < SessionViewModel.maxMultiTargetCount {
-                            Button {
-                                viewModel.addMultiTarget()
-                            } label: {
-                                Image(systemName: "plus.circle")
-                                    .font(.caption)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(viewModel.isSessionActive)
-                            .help("Add Target Language")
-                        }
-                        if viewModel.multiTargetCount > 2 {
-                            Button {
-                                viewModel.removeMultiTarget()
-                            } label: {
-                                Image(systemName: "minus.circle")
-                                    .font(.caption)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(viewModel.isSessionActive)
-                            .help("Remove Target Language")
-                        }
-                    }
-                } else {
-                    // Dual-pane: swap button + single target picker
-
-                    // Swap languages
+                // Swap languages (only with single target)
+                if viewModel.targetCount == 1 {
                     IconButton(
                         icon: "arrow.up.arrow.down",
                         help: "Swap Languages (⌘⇧S)",
@@ -208,30 +161,39 @@ struct ControlStripView: View {
                     ) {
                         viewModel.swapLanguages()
                     }
+                }
 
-                    // Target language (TO)
-                    Menu {
-                        ForEach(viewModel.supportedTargetLanguages, id: \.minimalIdentifier) { language in
-                            Button {
-                                logger.info("Target language selected: '\(language.minimalIdentifier)' (was '\(viewModel.targetLanguageIdentifier)')")
-                                viewModel.targetLanguageIdentifier = language.minimalIdentifier
-                            } label: {
-                                CheckmarkLabel(
-                                    title: displayName(for: language),
-                                    isSelected: viewModel.targetLanguageIdentifier == language.minimalIdentifier
-                                )
-                            }
+                if viewModel.targetCount > 1 { Divider() }
+
+                // Target language picker(s)
+                ForEach(0..<viewModel.targetCount, id: \.self) { slot in
+                    targetPicker(slot: slot)
+                }
+
+                // Add/remove target buttons
+                HStack(spacing: 4) {
+                    if viewModel.targetCount < SessionViewModel.maxTargetCount {
+                        Button {
+                            viewModel.addTargetLanguage()
+                        } label: {
+                            Image(systemName: "plus.circle")
+                                .font(.caption)
                         }
-                    } label: {
-                        Text(targetLanguageLabel)
-                            .font(.caption)
-                            .lineLimit(1)
+                        .buttonStyle(.plain)
+                        .disabled(viewModel.isSessionActive)
+                        .help("Add Target Language")
                     }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .disabled(viewModel.isSessionActive)
-                    .help("Target Language")
+                    if viewModel.targetCount > 1 {
+                        Button {
+                            viewModel.removeTargetLanguage()
+                        } label: {
+                            Image(systemName: "minus.circle")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(viewModel.isSessionActive)
+                        .help("Remove Target Language")
+                    }
                 }
             }
             .frame(width: 36)
@@ -266,21 +228,21 @@ struct ControlStripView: View {
     }
 
     @ViewBuilder
-    private func multiTargetPicker(slot: Int) -> some View {
+    private func targetPicker(slot: Int) -> some View {
         Menu {
             ForEach(viewModel.supportedTargetLanguages, id: \.minimalIdentifier) { language in
                 Button {
-                    logger.info("Multi target \(slot) selected: '\(language.minimalIdentifier)' (was '\(viewModel.multiTargetLanguageIdentifiers[slot])')")
-                    viewModel.multiTargetLanguageIdentifiers[slot] = language.minimalIdentifier
+                    logger.info("Target \(slot) selected: '\(language.minimalIdentifier)' (was '\(viewModel.targetLanguageIdentifiers[slot])')")
+                    viewModel.targetLanguageIdentifiers[slot] = language.minimalIdentifier
                 } label: {
                     CheckmarkLabel(
                         title: displayName(for: language),
-                        isSelected: viewModel.multiTargetLanguageIdentifiers[slot] == language.minimalIdentifier
+                        isSelected: viewModel.targetLanguageIdentifiers[slot] == language.minimalIdentifier
                     )
                 }
             }
         } label: {
-            Text(viewModel.multiTargetLanguageIdentifiers[slot].uppercased())
+            Text(viewModel.targetLanguageIdentifiers[slot].uppercased())
                 .font(.caption)
                 .lineLimit(1)
         }

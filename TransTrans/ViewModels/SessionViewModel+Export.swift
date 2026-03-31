@@ -65,8 +65,8 @@ extension SessionViewModel {
         if slotCount > 1 {
             var result: [String] = []
             for slot in 0..<slotCount {
-                let langId = slot < multiTargetLanguageIdentifiers.count
-                    ? multiTargetLanguageIdentifiers[slot].uppercased() : "?"
+                let langId = slot < targetLanguageIdentifiers.count
+                    ? targetLanguageIdentifiers[slot].uppercased() : "?"
                 result.append("[\(langId)]")
                 result.append(contentsOf: translationSlots[slot].lines.finalizedLines.map(\.text))
                 result.append("")

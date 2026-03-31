@@ -22,25 +22,25 @@ extension SessionViewModel {
         }
     }
 
-    // MARK: - Multi-Pane Target Management
+    // MARK: - Target Language Management
 
-    func addMultiTarget() {
-        guard multiTargetCount < Self.maxMultiTargetCount else { return }
-        multiTargetCount += 1
+    func addTargetLanguage() {
+        guard targetCount < Self.maxTargetCount else { return }
+        targetCount += 1
         // Pick a default language not already selected
-        let used = Set(multiTargetLanguageIdentifiers.prefix(multiTargetCount - 1))
+        let used = Set(targetLanguageIdentifiers.prefix(targetCount - 1))
         if let available = supportedTargetLanguages.first(where: { !used.contains($0.minimalIdentifier) }) {
-            if multiTargetLanguageIdentifiers.count < multiTargetCount {
-                multiTargetLanguageIdentifiers.append(available.minimalIdentifier)
+            if targetLanguageIdentifiers.count < targetCount {
+                targetLanguageIdentifiers.append(available.minimalIdentifier)
             } else {
-                multiTargetLanguageIdentifiers[multiTargetCount - 1] = available.minimalIdentifier
+                targetLanguageIdentifiers[targetCount - 1] = available.minimalIdentifier
             }
         }
     }
 
-    func removeMultiTarget() {
-        guard multiTargetCount > 2 else { return }
-        multiTargetCount -= 1
+    func removeTargetLanguage() {
+        guard targetCount > 1 else { return }
+        targetCount -= 1
     }
 
     // MARK: - Transcription Event Handling

@@ -12,14 +12,14 @@ final class SessionViewModel {
     // MARK: - Published State
 
     var sourceLines: [TranscriptLine] = []
-    /// Translation slots — one per target language (1 in dual/subtitle mode, 2-3 in multi mode).
+    /// Translation slots — one per target language (always `targetCount` active slots).
     var translationSlots: [TranslationSlot] = [TranslationSlot()]
     var isSessionActive = false
     var fontSize: CGFloat = 16
     var isAlwaysOnTop = true
     var errorMessage: String?
     var showSettings = false
-    var displayMode: DisplayMode = .dual
+    var displayMode: DisplayMode = .normal
     var permissionIssue: PermissionIssue?
 
     // MARK: - File Export State
@@ -67,10 +67,10 @@ final class SessionViewModel {
     var sourceLocaleIdentifier: String = UserDefaults.standard.string(forKey: "sourceLocaleIdentifier") ?? "ja_JP" {
         didSet { UserDefaults.standard.set(sourceLocaleIdentifier, forKey: "sourceLocaleIdentifier") }
     }
-    /// Convenience accessor for the primary target language (slot 0 of `multiTargetLanguageIdentifiers`).
+    /// Convenience accessor for the primary target language (slot 0 of `targetLanguageIdentifiers`).
     var targetLanguageIdentifier: String {
-        get { multiTargetLanguageIdentifiers[0] }
-        set { multiTargetLanguageIdentifiers[0] = newValue }
+        get { targetLanguageIdentifiers[0] }
+        set { targetLanguageIdentifiers[0] = newValue }
     }
 
     var supportedSourceLocales: [Locale] = []
@@ -80,21 +80,29 @@ final class SessionViewModel {
     var availableMicrophones: [AVCaptureDevice] = []
     var selectedMicrophoneID: String = ""  // empty = system default
 
-    // MARK: - Multi-Pane State
+    // MARK: - Target Language Count
 
-    /// Maximum number of target languages in multi-pane mode.
-    static let maxMultiTargetCount = 3
+    /// Maximum number of target languages.
+    static let maxTargetCount = 3
 
-    /// Number of active target panes in multi mode (2 or 3).
-    var multiTargetCount: Int = {
-        let stored = UserDefaults.standard.integer(forKey: "multiTargetCount")
-        return (stored >= 2 && stored <= 3) ? stored : 2
+    /// Number of active target panes (1, 2, or 3).
+    var targetCount: Int = {
+        // Migration: read new key first, then legacy "multiTargetCount"
+        let stored = UserDefaults.standard.integer(forKey: "targetCount")
+        if stored >= 1 && stored <= 3 { return stored }
+        let legacy = UserDefaults.standard.integer(forKey: "multiTargetCount")
+        if legacy >= 2 && legacy <= 3 { return legacy }
+        return 1
     }() {
-        didSet { UserDefaults.standard.set(multiTargetCount, forKey: "multiTargetCount") }
+        didSet { UserDefaults.standard.set(targetCount, forKey: "targetCount") }
     }
 
-    /// Target language identifiers (slot 0 is also the dual/subtitle target).
-    var multiTargetLanguageIdentifiers: [String] = {
+    /// Target language identifiers for all slots (always 3 elements; only first `targetCount` are active).
+    var targetLanguageIdentifiers: [String] = {
+        // Try new key first, then legacy key
+        if let stored = UserDefaults.standard.array(forKey: "targetLanguageIdentifiers") as? [String], stored.count >= 3 {
+            return stored
+        }
         if let stored = UserDefaults.standard.array(forKey: "multiTargetLanguageIdentifiers") as? [String], stored.count >= 3 {
             return stored
         }
@@ -102,14 +110,14 @@ final class SessionViewModel {
         let slot0 = UserDefaults.standard.string(forKey: "targetLanguageIdentifier") ?? "en"
         return [slot0, "zh-Hans", "ko"]
     }() {
-        didSet { UserDefaults.standard.set(multiTargetLanguageIdentifiers, forKey: "multiTargetLanguageIdentifiers") }
+        didSet { UserDefaults.standard.set(targetLanguageIdentifiers, forKey: "targetLanguageIdentifiers") }
     }
 
     // MARK: - Computed Properties
 
-    /// Number of active translation slots based on current display mode.
+    /// Number of active translation slots (always matches `targetCount`).
     var activeSlotCount: Int {
-        displayMode == .multi ? multiTargetCount : 1
+        targetCount
     }
 
     var sourceLocale: Locale {
@@ -138,15 +146,55 @@ final class SessionViewModel {
     static let sentenceEndChars: Set<Character> = [".", "。", "!", "?", "！", "？"]
     static let sentenceBoundaryTimeout: UInt64 = 3_000_000_000 // 3 seconds in nanoseconds
 
+    // MARK: - Device Monitoring
+
+    /// Persistent discovery session kept alive for KVO observation of device changes.
+    private var microphoneDiscoverySession: AVCaptureDevice.DiscoverySession?
+    private var deviceObservation: NSKeyValueObservation?
+
     // MARK: - Lifecycle
 
+    /// Refreshes the microphone list and starts monitoring for device changes (connect/disconnect).
     func refreshMicrophones() {
-        let discoverySession = AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.microphone],
-            mediaType: .audio,
-            position: .unspecified
-        )
-        availableMicrophones = discoverySession.devices
+        // Create a persistent discovery session if not already set up
+        if microphoneDiscoverySession == nil {
+            let session = AVCaptureDevice.DiscoverySession(
+                deviceTypes: [.microphone],
+                mediaType: .audio,
+                position: .unspecified
+            )
+            microphoneDiscoverySession = session
+
+            // Observe device list changes via KVO
+            deviceObservation = session.observe(\.devices, options: [.new]) { [weak self] discoverySession, _ in
+                let devices = discoverySession.devices
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    self.availableMicrophones = devices
+                    logger.info("Microphone list updated: \(devices.count) device(s)")
+
+                    // If the selected device disappeared, reset to default
+                    if !self.selectedMicrophoneID.isEmpty,
+                       !devices.contains(where: { $0.uniqueID == self.selectedMicrophoneID }) {
+                        logger.info("Selected microphone disconnected, resetting to default")
+                        let wasActive = self.isSessionActive
+                        self.selectedMicrophoneID = ""
+
+                        // Stop the active session since the device is gone
+                        if wasActive {
+                            logger.warning("Active microphone disconnected during session, stopping")
+                            await self.stopSession()
+                            self.errorMessage = String(
+                                localized: "Microphone was disconnected. The session has been stopped.",
+                                comment: "Error shown when the active microphone is unplugged during a session"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        availableMicrophones = microphoneDiscoverySession?.devices ?? []
         logger.info("Found \(self.availableMicrophones.count) microphone(s)")
 
         // If the selected device disappeared, reset to default
@@ -277,7 +325,7 @@ final class SessionViewModel {
             if i < previousSlots.count {
                 slot.lines = previousSlots[i].lines
             }
-            let targetLang = Locale.Language(identifier: multiTargetLanguageIdentifiers[i])
+            let targetLang = Locale.Language(identifier: targetLanguageIdentifiers[i])
             slot.config = TranslationSession.Configuration(
                 source: sourceLocale.language,
                 target: targetLang
@@ -426,6 +474,12 @@ final class SessionViewModel {
                     available.append(lang)
                 }
             }
+        }
+        // Sort by localized display name for a user-friendly order
+        available.sort { lhs, rhs in
+            let lhsName = Locale.current.localizedString(forIdentifier: lhs.minimalIdentifier) ?? lhs.minimalIdentifier
+            let rhsName = Locale.current.localizedString(forIdentifier: rhs.minimalIdentifier) ?? rhs.minimalIdentifier
+            return lhsName.localizedCaseInsensitiveCompare(rhsName) == .orderedAscending
         }
         supportedTargetLanguages = available
         logger.info("updateTargetLanguages: \(available.count) target languages available")

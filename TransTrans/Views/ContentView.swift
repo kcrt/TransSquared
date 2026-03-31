@@ -20,17 +20,9 @@ struct ContentView: View {
                 )
                 Divider()
 
-                if viewModel.displayMode == .multi {
-                    ForEach(0..<viewModel.multiTargetCount, id: \.self) { slot in
-                        if slot > 0 { Divider() }
-                        multiTargetPane(slot: slot)
-                    }
-                } else {
-                    TranscriptPaneView(
-                        lines: viewModel.translationSlots[0].lines,
-                        fontSize: viewModel.fontSize,
-                        placeholder: viewModel.isSessionActive ? nil : String(localized: "Translation will appear here")
-                    )
+                ForEach(0..<viewModel.targetCount, id: \.self) { slot in
+                    if slot > 0 { Divider() }
+                    targetPane(slot: slot)
                 }
             }
 
@@ -40,7 +32,7 @@ struct ContentView: View {
             ControlStripView(viewModel: viewModel)
         }
         .glassEffect(.regular, in: .rect)
-        .frame(minWidth: 320, minHeight: viewModel.displayMode == .multi ? 320 : 200)
+        .frame(minWidth: 320, minHeight: viewModel.targetCount > 1 ? 320 : 200)
         .translationTask(viewModel.translationSlots.indices.contains(0) ? viewModel.translationSlots[0].config : nil) { session in
             await viewModel.handleTranslationSession(session, slot: 0)
         }
@@ -57,30 +49,30 @@ struct ContentView: View {
             setWindowLevel(viewModel.isAlwaysOnTop)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didDeminiaturizeNotification)) { notification in
-            // When the main window is restored from Dock, switch back to dual mode
+            // When the main window is restored from Dock, switch back to normal mode
             if let window = notification.object as? NSWindow,
                !(window is NSPanel),
                viewModel.displayMode == .subtitle {
-                logger.info("Display mode → dual (reason: main window deminiaturized from Dock)")
-                viewModel.displayMode = .dual
+                logger.info("Display mode → normal (reason: main window deminiaturized from Dock)")
+                viewModel.displayMode = .normal
             }
         }
         .onChange(of: viewModel.isAlwaysOnTop) {
             setWindowLevel(viewModel.isAlwaysOnTop)
         }
         .onChange(of: viewModel.isSessionActive) {
-            // Return to dual mode when the session stops
+            // Return to normal mode when the session stops
             if !viewModel.isSessionActive && viewModel.displayMode == .subtitle {
-                logger.info("Display mode → dual (reason: session ended while in subtitle mode)")
-                viewModel.displayMode = .dual
+                logger.info("Display mode → normal (reason: session ended while in subtitle mode)")
+                viewModel.displayMode = .normal
             }
         }
         .onChange(of: viewModel.displayMode) { oldValue, newValue in
             logger.info("Display mode changed: \(oldValue.rawValue) → \(newValue.rawValue)")
             if newValue == .subtitle {
                 subtitleController.onDismiss = { [weak viewModel] in
-                    logger.info("Display mode → dual (reason: subtitle overlay dismissed by user)")
-                    viewModel?.displayMode = .dual
+                    logger.info("Display mode → normal (reason: subtitle overlay dismissed by user)")
+                    viewModel?.displayMode = .normal
                 }
                 subtitleController.show(viewModel: viewModel)
                 // Miniaturize the main window so only the subtitle overlay is visible
@@ -153,16 +145,21 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func multiTargetPane(slot: Int) -> some View {
-        let langId = slot < viewModel.multiTargetLanguageIdentifiers.count
-            ? Locale.current.localizedString(forIdentifier: viewModel.multiTargetLanguageIdentifiers[slot])
-                ?? viewModel.multiTargetLanguageIdentifiers[slot].uppercased()
+    private func targetPane(slot: Int) -> some View {
+        let langId = slot < viewModel.targetLanguageIdentifiers.count
+            ? Locale.current.localizedString(forIdentifier: viewModel.targetLanguageIdentifiers[slot])
+                ?? viewModel.targetLanguageIdentifiers[slot].uppercased()
             : "?"
         let lines = slot < viewModel.translationSlots.count ? viewModel.translationSlots[slot].lines : []
+        let placeholder: String? = viewModel.isSessionActive ? nil : (
+            viewModel.targetCount == 1
+                ? String(localized: "Translation will appear here")
+                : langId
+        )
         TranscriptPaneView(
             lines: lines,
             fontSize: viewModel.fontSize,
-            placeholder: viewModel.isSessionActive ? nil : langId
+            placeholder: placeholder
         )
     }
 
@@ -180,19 +177,13 @@ struct ContentView: View {
             Button("Pin") { viewModel.isAlwaysOnTop.toggle() }
                 .keyboardShortcut("t", modifiers: .command)
             Button("SubtitleMode") {
-                // Only allow entering subtitle mode when a session is active and in dual mode
                 if viewModel.displayMode == .subtitle {
-                    viewModel.displayMode = .dual
-                } else if viewModel.isSessionActive && viewModel.displayMode == .dual {
+                    viewModel.displayMode = .normal
+                } else if viewModel.isSessionActive {
                     viewModel.displayMode = .subtitle
                 }
             }
                 .keyboardShortcut("d", modifiers: .command)
-            Button("MultiPane") {
-                guard !viewModel.isSessionActive else { return }
-                viewModel.displayMode = viewModel.displayMode == .multi ? .dual : .multi
-            }
-                .keyboardShortcut("m", modifiers: .command)
             Button("Save") {
                 viewModel.saveTranscript(contentType: .both)
             }
