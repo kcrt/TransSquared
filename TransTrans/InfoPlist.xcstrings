@@ -21,54 +21,18 @@
     },
     "NSHumanReadableCopyright" : {
       "comment" : "Copyright (human-readable)",
-      "extractionState" : "extracted_with_value",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "(C) 2026 Kyohei Takahashi"
+            "value" : "© 2026 Kyohei Takahashi"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "(C) 2026 Kyohei Takahashi"
-          }
-        }
-      }
-    },
-    "NSMicrophoneUsageDescription" : {
-      "comment" : "Privacy - Microphone Usage Description",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Acquire user voice to translate"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳のためにユーザーの音声を取得します"
-          }
-        }
-      }
-    },
-    "NSSpeechRecognitionUsageDescription" : {
-      "comment" : "Privacy - Speech Recognition Usage Description",
-      "extractionState" : "extracted_with_value",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Recognize user's voice for translation"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳のためにユーザーの音声を認識します"
+            "value" : "© 2026 Kyohei Takahashi"
           }
         }
       }

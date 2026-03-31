@@ -2,6 +2,8 @@
 
 A macOS application for real-time speech transcription and translation. TransTrans captures microphone audio, transcribes speech using Apple's Speech framework, and translates it into a target language using Apple's Translation framework — all in real-time.
 
+![TransTrans Screenshot](screenshot.png)
+
 ## Features
 
 - **Real-time transcription** — Live speech-to-text using Apple's Speech framework with progressive transcription

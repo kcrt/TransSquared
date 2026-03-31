@@ -84,8 +84,8 @@ final class SubtitleWindowController {
     private var keyMonitor: Any?
 
     private func startUpdateTimer() {
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { @Sendable [weak self] _ in
-            MainActor.assumeIsolated {
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
                 self?.updateContent()
             }
         }

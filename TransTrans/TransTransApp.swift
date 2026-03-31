@@ -28,11 +28,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct TransTransApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
+    private let supportURL = URL(string: "https://github.com/kcrt/TransTrans")!
+
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
         .defaultSize(width: 480, height: 240)
         .windowResizability(.contentSize)
+        .commands {
+            CommandGroup(replacing: .help) {
+                Link("TransTrans Support", destination: supportURL)
+            }
+        }
     }
 }
