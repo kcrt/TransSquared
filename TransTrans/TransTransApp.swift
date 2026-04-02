@@ -36,6 +36,7 @@ struct TransTransApp: App {
         }
         .defaultSize(width: 480, height: 240)
         .windowResizability(.contentSize)
+        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
             CommandGroup(replacing: .help) {
                 Link("TransTrans Support", destination: supportURL)
