@@ -28,8 +28,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct TransTransApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
-    private let supportURL = URL(string: "https://github.com/kcrt/TransTrans")!
-
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -38,9 +36,7 @@ struct TransTransApp: App {
         .windowResizability(.contentSize)
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
-            CommandGroup(replacing: .help) {
-                Link("TransTrans Support", destination: supportURL)
-            }
+            AppMenuCommands()
         }
     }
 }

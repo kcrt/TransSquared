@@ -87,12 +87,9 @@ struct ContentView: View {
         .contextMenu {
             contextMenuItems
         }
+        .focusedSceneValue(viewModel)
         .focusable()
         .focusEffectDisabled()
-        // Overlay invisible buttons for keyboard shortcuts
-        .background {
-            shortcutButtons
-        }
         .modifier(SheetsAndAlerts(viewModel: viewModel))
     }
 
@@ -356,36 +353,6 @@ struct ContentView: View {
             return String(localized: "Subtitle mode is available only with a single destination language")
         }
         return String(localized: "Subtitle Mode (⌘D)")
-    }
-
-    // MARK: - Keyboard Shortcuts
-
-    @ViewBuilder
-    private var shortcutButtons: some View {
-        VStack {
-            Button("Start/Stop") { viewModel.toggleSession() }
-                .keyboardShortcut("r", modifiers: .command)
-            Button("Swap") { viewModel.swapLanguages() }
-                .keyboardShortcut("s", modifiers: [.command, .shift])
-            Button("Font+") { viewModel.increaseFontSize() }
-                .keyboardShortcut("+", modifiers: .command)
-            Button("Font-") { viewModel.decreaseFontSize() }
-                .keyboardShortcut("-", modifiers: .command)
-            Button("Pin") { viewModel.isAlwaysOnTop.toggle() }
-                .keyboardShortcut("t", modifiers: .command)
-            Button("SubtitleMode") {
-                viewModel.toggleDisplayMode()
-            }
-                .keyboardShortcut("d", modifiers: .command)
-            Button("Save") {
-                viewModel.saveTranscript(contentType: .both)
-            }
-                .keyboardShortcut("s", modifiers: .command)
-                .disabled(!viewModel.hasTranscriptContent)
-        }
-        .frame(width: 0, height: 0)
-        .opacity(0)
-        .allowsHitTesting(false)
     }
 
     @ViewBuilder
