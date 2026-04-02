@@ -9,16 +9,9 @@ A macOS application for real-time speech transcription and translation. TransTra
 - **Real-time transcription** — Live speech-to-text using Apple's Speech framework with progressive transcription
 - **Automatic translation** — Instant translation of transcribed text via Apple's Translation framework
 - **Multi-target language support** — Translate into up to 5 target languages simultaneously, with one-click language swap (⌘⇧S)
-- **Custom vocabulary** — Add domain-specific terminology to improve recognition accuracy (up to 100 words per language)
-- **Microphone selection** — Choose from available audio input devices or use the system default
 - **Audio level visualization** — Color-coded waveform display (green/orange/red)
-- **Native macOS toolbar** — Integrated toolbar with recording, display, language, and font controls
-- **Menu bar commands** — Full menu bar integration with save (original/translation/interleaved), copy, and display controls
 - **Always-on-top mode** — Keep the window above other applications (⌘T)
-- **Adjustable font size** — Resize transcript text (⌘+ / ⌘−)
-- **Frosted glass UI** — Translucent HUD-style window design
 - **Subtitle mode** — Movie-style subtitle overlay at the bottom of the screen, showing translation only (⌘D); lines auto-expire after 30 seconds
-- **Save & copy transcripts** — Save or copy original, translation, or interleaved text via menu or context menu
 
 ## Requirements
 
