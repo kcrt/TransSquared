@@ -272,10 +272,10 @@ final class SessionViewModel {
         transcriptionTask = Task {
             do {
                 logger.info("Starting transcription manager...")
-                let events = try await transcriptionManager.start(locale: sourceLocale, audioDevice: selectedMicrophone, contextualStrings: currentContextualStrings)
+                let streams = try await transcriptionManager.start(locale: sourceLocale, audioDevice: selectedMicrophone, contextualStrings: currentContextualStrings)
 
                 // Start consuming audio levels for waveform display
-                if let levelStream = await transcriptionManager.audioLevelStream {
+                if let levelStream = streams.audioLevels {
                     audioLevelTask = Task {
                         for await level in levelStream {
                             audioLevels.append(level)
@@ -287,7 +287,7 @@ final class SessionViewModel {
                 }
 
                 logger.info("Transcription started, consuming events...")
-                for await event in events {
+                for await event in streams.events {
                     handleTranscriptionEvent(event)
                 }
                 logger.info("Event stream ended")

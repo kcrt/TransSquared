@@ -8,6 +8,12 @@ enum TranscriptionEvent: Sendable {
     case error(String)
 }
 
+/// Streams returned by `TranscriptionManager.start()`.
+struct TranscriptionStreams {
+    let events: AsyncStream<TranscriptionEvent>
+    let audioLevels: AsyncStream<Float>?
+}
+
 actor TranscriptionManager {
     private nonisolated let logger = Logger.app("Transcription")
     private var analyzer: SpeechAnalyzer?
@@ -18,13 +24,10 @@ actor TranscriptionManager {
     private var eventContinuation: AsyncStream<TranscriptionEvent>.Continuation?
     private var isRunning = false
 
-    /// The audio level stream from the current capture session (for waveform UI).
-    private(set) var audioLevelStream: AsyncStream<Float>?
-
-    func start(locale: Locale, audioDevice: AVCaptureDevice? = nil, contextualStrings: [String] = []) async throws -> AsyncStream<TranscriptionEvent> {
+    func start(locale: Locale, audioDevice: AVCaptureDevice? = nil, contextualStrings: [String] = []) async throws -> TranscriptionStreams {
         guard !isRunning else {
             logger.warning("start() called while already running")
-            throw TranscriptionError.alreadyRunning
+            throw TransTransError.alreadyRunning
         }
 
         logger.info("Starting transcription for locale: \(locale.identifier)")
@@ -60,7 +63,7 @@ actor TranscriptionManager {
             considering: hardwareFormat
         ) else {
             logger.error("No compatible audio format found for transcriber")
-            throw TranscriptionError.audioFormatUnavailable
+            throw TransTransError.audioFormatUnavailable
         }
         logger.info("Selected audio format: \(audioFormat.sampleRate) Hz, \(audioFormat.channelCount) ch")
 
@@ -85,8 +88,9 @@ actor TranscriptionManager {
         let (eventStream, continuation) = AsyncStream.makeStream(of: TranscriptionEvent.self)
         self.eventContinuation = continuation
 
+        let audioLevels = await captureService.audioLevelStream
+
         self.audioCaptureService = captureService
-        self.audioLevelStream = await captureService.audioLevelStream
         self.transcriber = newTranscriber
         self.analyzer = newAnalyzer
         self.isRunning = true
@@ -141,7 +145,7 @@ actor TranscriptionManager {
         }
 
         logger.info("Transcription pipeline fully started")
-        return eventStream
+        return TranscriptionStreams(events: eventStream, audioLevels: audioLevels)
     }
 
     func stop() async {
@@ -173,7 +177,6 @@ actor TranscriptionManager {
         transcriber = nil
         eventContinuation?.finish()
         eventContinuation = nil
-        audioLevelStream = nil
         isRunning = false
         logger.info("Transcription stopped")
     }
@@ -185,16 +188,4 @@ actor TranscriptionManager {
     }
 }
 
-enum TranscriptionError: Error, LocalizedError {
-    case alreadyRunning
-    case audioFormatUnavailable
 
-    var errorDescription: String? {
-        switch self {
-        case .alreadyRunning:
-            return "Transcription is already running."
-        case .audioFormatUnavailable:
-            return "No compatible audio format available. Assets may need to be installed."
-        }
-    }
-}

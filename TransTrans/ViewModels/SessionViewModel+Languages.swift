@@ -103,6 +103,27 @@ extension SessionViewModel {
         logger.info("updateTargetLanguages: final target='\(self.targetLanguageIdentifier)'")
     }
 
+    // MARK: - Target Language Count
+
+    func addTargetLanguage() {
+        guard targetCount < Self.maxTargetCount else { return }
+        targetCount += 1
+        // Pick a default language not already selected
+        let used = Set(targetLanguageIdentifiers.prefix(targetCount - 1))
+        if let available = supportedTargetLanguages.first(where: { !used.contains($0.minimalIdentifier) }) {
+            if targetLanguageIdentifiers.count < targetCount {
+                targetLanguageIdentifiers.append(available.minimalIdentifier)
+            } else {
+                targetLanguageIdentifiers[targetCount - 1] = available.minimalIdentifier
+            }
+        }
+    }
+
+    func removeTargetLanguage() {
+        guard targetCount > 1 else { return }
+        targetCount -= 1
+    }
+
     // MARK: - Locale Resolution Helpers
 
     /// Extracts the likely region from a language identifier via its maximal form.

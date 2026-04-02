@@ -51,12 +51,12 @@ final class AudioCaptureService {
     func startCapture(audioFormat: AVAudioFormat, device: AVCaptureDevice? = nil) throws -> AsyncStream<AnalyzerInput> {
         guard !isCapturing else {
             logger.error("startCapture called while already capturing")
-            throw AudioCaptureError.alreadyCapturing
+            throw TransTransError.alreadyCapturing
         }
 
         guard let audioDevice = device ?? AVCaptureDevice.default(for: .audio) else {
             logger.error("No default audio device available for capture")
-            throw AudioCaptureError.microphoneUnavailable
+            throw TransTransError.microphoneUnavailable
         }
         logger.info("Starting capture with device: \(audioDevice.localizedName)")
         logger.info("Target audio format: \(audioFormat.sampleRate) Hz, \(audioFormat.channelCount) ch, \(audioFormat.commonFormat.rawValue)")
@@ -68,7 +68,7 @@ final class AudioCaptureService {
         let audioInput = try AVCaptureDeviceInput(device: audioDevice)
         guard session.canAddInput(audioInput) else {
             logger.error("Cannot add audio input to capture session")
-            throw AudioCaptureError.microphoneUnavailable
+            throw TransTransError.microphoneUnavailable
         }
         session.addInput(audioInput)
         logger.debug("Added audio input to session")
@@ -77,7 +77,7 @@ final class AudioCaptureService {
         let audioOutput = AVCaptureAudioDataOutput()
         guard session.canAddOutput(audioOutput) else {
             logger.error("Cannot add audio output to capture session")
-            throw AudioCaptureError.microphoneUnavailable
+            throw TransTransError.microphoneUnavailable
         }
         session.addOutput(audioOutput)
         logger.debug("Added audio data output to session")
@@ -143,17 +143,5 @@ final class AudioCaptureService {
     }
 }
 
-enum AudioCaptureError: Error, LocalizedError {
-    case alreadyCapturing
-    case microphoneUnavailable
 
-    var errorDescription: String? {
-        switch self {
-        case .alreadyCapturing:
-            return "Audio capture is already in progress."
-        case .microphoneUnavailable:
-            return "Microphone is not available."
-        }
-    }
-}
 
