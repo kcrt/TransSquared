@@ -11,6 +11,12 @@ extension SessionViewModel {
     /// Called from the `.translationTask()` view modifier when a session is available for a given slot.
     func handleTranslationSession(_ session: TranslationSession, slot: Int) async {
         guard slot >= 0 && slot < translationSlots.count else { return }
+        translationSlots[slot].isProcessing = true
+        defer {
+            if slot < translationSlots.count {
+                translationSlots[slot].isProcessing = false
+            }
+        }
         logger.info("Translation session available for slot \(slot), queued: \(self.translationSlots[slot].queue.count)")
 
         // Process queued translations using the session provided by the closure.
@@ -174,6 +180,18 @@ extension SessionViewModel {
                 }
             } else {
                 translationSlots[slot].lines[targetIndex] = TranscriptLine(text: response.targetText, isPartial: false, finalizedAt: Date())
+            }
+        } catch is CancellationError {
+            // Task was cancelled (e.g. session stopped) — not a real failure.
+            logger.info("Slot \(slot) translation cancelled")
+        } catch let error where "\(error)".contains("alreadyCancelled") {
+            // The translation session was invalidated/replaced while this request was in flight.
+            // Re-enqueue the item so the next session can pick it up.
+            logger.info("Slot \(slot) translation session already cancelled, re-enqueueing")
+            if slot < translationSlots.count {
+                translationSlots[slot].queue.insert(
+                    (sentence: sentence, targetIndex: targetIndex, isPartial: isPartial), at: 0
+                )
             }
         } catch {
             logger.error("Slot \(slot) translation failed: \(error.localizedDescription)")

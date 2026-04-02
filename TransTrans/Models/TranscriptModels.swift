@@ -84,6 +84,10 @@ struct TranslationSlot {
     var partialTargetIndex: Int = -1
     var partialTranslationTimer: Task<Void, Never>? = nil
     var config: TranslationSession.Configuration? = nil
+    /// True while a `handleTranslationSession` loop is actively draining the queue.
+    /// When set, `enqueueTranslation` skips `invalidate()` because the running session
+    /// will pick up new items via its `while` loop.
+    var isProcessing: Bool = false
 
     /// Ensures a placeholder line exists for the translation, enqueues the sentence, and invalidates config.
     /// If `reusePartial` is true and a valid partial line exists, it is reused; otherwise a new placeholder is appended.
@@ -106,13 +110,18 @@ struct TranslationSlot {
         }
 
         queue.append((sentence: sentence, targetIndex: targetIndex, isPartial: isPartial))
-        config?.invalidate()
+        // Only invalidate when no session is actively processing — the running session's
+        // while-loop will naturally pick up newly enqueued items without needing a restart.
+        if !isProcessing {
+            config?.invalidate()
+        }
         return targetIndex
     }
 
     mutating func reset() {
         queue = []
         partialTargetIndex = -1
+        isProcessing = false
         partialTranslationTimer?.cancel()
         partialTranslationTimer = nil
         config = nil
