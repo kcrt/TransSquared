@@ -16,7 +16,7 @@ final class SessionViewModel {
     var translationSlots: [TranslationSlot] = [TranslationSlot()]
     var isSessionActive = false
     var fontSize: CGFloat = 16
-    var isAlwaysOnTop = true
+    var isAlwaysOnTop = false
     var errorMessage: String?
     var showSettings = false
     var displayMode: DisplayMode = .normal

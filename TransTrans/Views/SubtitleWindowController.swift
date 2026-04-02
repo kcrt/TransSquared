@@ -37,7 +37,7 @@ final class SubtitleWindowController {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
-        panel.level = .screenSaver  // Above everything, like subtitles
+        panel.level = .floating  // Above normal windows but below system UI
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.ignoresMouseEvents = false
         panel.isMovableByWindowBackground = false
