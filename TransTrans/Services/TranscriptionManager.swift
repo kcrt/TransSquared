@@ -4,7 +4,7 @@ import os
 
 enum TranscriptionEvent: Sendable {
     case partial(String)
-    case final_(String)
+    case finalized(String)
     case error(String)
 }
 
@@ -108,7 +108,7 @@ actor TranscriptionManager {
                     let text = String(result.text.characters)
                     if result.isFinal {
                         logger.info("Final result #\(resultCount): \"\(text)\"")
-                        capturedContinuation.yield(.final_(text))
+                        capturedContinuation.yield(.finalized(text))
                     } else {
                         logger.debug("Partial result #\(resultCount): \"\(text)\"")
                         capturedContinuation.yield(.partial(text))

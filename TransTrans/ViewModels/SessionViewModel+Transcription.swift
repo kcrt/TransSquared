@@ -22,7 +22,7 @@ extension SessionViewModel {
             // Request partial translation (debounced)
             requestPartialTranslation(for: pendingSentenceBuffer + text)
 
-        case .final_(let rawText):
+        case .finalized(let rawText):
             let text = applyAutoReplacements(rawText)
             logger.info("Event: final \"\(rawText)\" → \"\(text)\"")
             // Cancel any pending partial translation timers
@@ -64,15 +64,25 @@ extension SessionViewModel {
     }
 
     func resetSentenceBoundaryTimer() {
-        sentenceBoundaryTimer?.cancel()
+        sentenceBoundaryGeneration &+= 1
+
+        // If a timer task is already running, it will detect the new generation and
+        // re-wait, avoiding Task creation churn on every finalized chunk.
+        guard sentenceBoundaryTimer == nil else { return }
+
         sentenceBoundaryTimer = Task {
-            try? await Task.sleep(nanoseconds: Self.sentenceBoundaryTimeout)
-            guard !Task.isCancelled else { return }
-            if !pendingSentenceBuffer.isEmpty {
-                let sentence = pendingSentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
-                pendingSentenceBuffer = ""
-                commitSentence(sentence)
+            defer { sentenceBoundaryTimer = nil }
+            var lastGen: UInt64 = 0
+            while !Task.isCancelled {
+                let currentGen = sentenceBoundaryGeneration
+                if currentGen == lastGen { break }
+                lastGen = currentGen
+                try? await Task.sleep(for: Self.sentenceBoundaryTimeout)
             }
+            guard !Task.isCancelled, !pendingSentenceBuffer.isEmpty else { return }
+            let sentence = pendingSentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+            pendingSentenceBuffer = ""
+            commitSentence(sentence)
         }
     }
 }

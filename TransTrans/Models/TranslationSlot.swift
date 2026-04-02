@@ -14,8 +14,13 @@ struct TranslationSlot {
     var lines: [TranscriptLine] = []
     var queue: [TranslationQueueItem] = []
     var partialTargetIndex: Int = -1
-    var partialTranslationTimer: Task<Void, Never>? = nil
-    var config: TranslationSession.Configuration? = nil
+    var partialTranslationTimer: Task<Void, Never>?
+    /// The most recent partial text awaiting debounced translation.
+    var pendingPartialText: String?
+    /// Incremented on each partial translation request; the debounce task re-waits
+    /// when it detects the generation changed, avoiding Task creation churn.
+    var partialDebounceGeneration: UInt64 = 0
+    var config: TranslationSession.Configuration?
     /// True while a `handleTranslationSession` loop is actively draining the queue.
     /// When set, `enqueueTranslation` skips `invalidate()` because the running session
     /// will pick up new items via its `while` loop.
@@ -56,6 +61,7 @@ struct TranslationSlot {
         isProcessing = false
         partialTranslationTimer?.cancel()
         partialTranslationTimer = nil
+        pendingPartialText = nil
         config = nil
     }
 }

@@ -41,11 +41,30 @@ extension SessionViewModel {
 
     private func requestPartialTranslationForSlot(_ slot: Int, text: String) {
         guard slot < translationSlots.count else { return }
-        translationSlots[slot].partialTranslationTimer?.cancel()
+        translationSlots[slot].pendingPartialText = text
+        translationSlots[slot].partialDebounceGeneration &+= 1
+
+        // If a debounce task is already running, it will detect the new generation and re-wait.
+        // This avoids creating and cancelling a new Task on every partial event (~10+/sec).
+        guard translationSlots[slot].partialTranslationTimer == nil else { return }
+
         let capturedSlot = slot
         translationSlots[slot].partialTranslationTimer = Task {
-            try? await Task.sleep(nanoseconds: Self.partialTranslationDebounce)
-            guard !Task.isCancelled, capturedSlot < translationSlots.count else { return }
+            defer {
+                if capturedSlot < translationSlots.count {
+                    translationSlots[capturedSlot].partialTranslationTimer = nil
+                }
+            }
+            var lastGen: UInt64 = 0
+            while !Task.isCancelled, capturedSlot < translationSlots.count {
+                let currentGen = translationSlots[capturedSlot].partialDebounceGeneration
+                if currentGen == lastGen { break }
+                lastGen = currentGen
+                try? await Task.sleep(for: Self.partialTranslationDebounce)
+            }
+            guard !Task.isCancelled, capturedSlot < translationSlots.count,
+                  let text = translationSlots[capturedSlot].pendingPartialText else { return }
+            translationSlots[capturedSlot].pendingPartialText = nil
 
             let idx = translationSlots[capturedSlot].enqueueTranslation(sentence: text, isPartial: true)
             logger.debug("Queuing partial translation slot \(capturedSlot) (targetIndex: \(idx)): \"\(text)\"")
@@ -67,6 +86,7 @@ extension SessionViewModel {
         guard slot < translationSlots.count else { return }
         translationSlots[slot].partialTranslationTimer?.cancel()
         translationSlots[slot].partialTranslationTimer = nil
+        translationSlots[slot].pendingPartialText = nil
 
         let idx = translationSlots[slot].enqueueTranslation(sentence: sentence, isPartial: false, resetPartialIndex: true)
         logger.debug("Queuing for translation (slot: \(slot), targetIndex: \(idx))")
@@ -92,12 +112,11 @@ extension SessionViewModel {
         } catch is CancellationError {
             // Task was cancelled (e.g. session stopped) — not a real failure.
             logger.info("Slot \(slot) translation cancelled")
-        } catch let error as NSError where error.domain.contains("Translation") || "\(error)".contains("alreadyCancelled") {
+        } catch where Self.isTranslationSessionCancellation(error) {
             // The translation session was invalidated/replaced while this request was in flight.
-            // Primary match: NSError domain containing "Translation" (covers framework errors).
-            // Fallback: string match for "alreadyCancelled" in case the error type changes.
             // Re-enqueue the item so the next session can pick it up.
-            logger.info("Slot \(slot) translation session cancelled (domain: \(error.domain), code: \(error.code)), re-enqueueing")
+            let nsError = error as NSError
+            logger.info("Slot \(slot) translation session cancelled (domain: \(nsError.domain), code: \(nsError.code)), re-enqueueing")
             if slot < translationSlots.count {
                 translationSlots[slot].queue.insert(
                     TranslationQueueItem(sentence: sentence, targetIndex: targetIndex, isPartial: isPartial), at: 0
@@ -113,5 +132,13 @@ extension SessionViewModel {
                 }
             }
         }
+    }
+
+    /// Determines whether an error represents a Translation framework session cancellation.
+    /// These errors occur when `TranslationSession.Configuration.invalidate()` is called
+    /// while a translation request is in flight.
+    private static func isTranslationSessionCancellation(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain.contains("Translation")
     }
 }

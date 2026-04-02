@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import SwiftUI
 
 /// Manages a borderless, transparent overlay window that displays subtitle text
@@ -60,9 +61,8 @@ final class SubtitleWindowController {
             return event
         }
 
-        // Keep content up-to-date using a periodic timer.
-        // Update the existing hosting view's rootView instead of recreating it each tick.
-        startUpdateTimer()
+        // Observe ViewModel changes reactively and refresh periodically for subtitle expiration.
+        startObserving()
     }
 
     func close() {
@@ -87,10 +87,24 @@ final class SubtitleWindowController {
     private var updateTimer: Timer?
     private var keyMonitor: Any?
 
-    private func startUpdateTimer() {
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+    private func startObserving() {
+        observeViewModel()
+        // Periodic timer only for refreshing `now` to expire old subtitle lines (1s is sufficient).
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.updateContent()
+            }
+        }
+    }
+
+    /// Reactively updates subtitle content when ViewModel properties change.
+    private func observeViewModel() {
+        guard viewModel != nil, hostingView != nil else { return }
+        withObservationTracking {
+            updateContent()
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.observeViewModel()
             }
         }
     }

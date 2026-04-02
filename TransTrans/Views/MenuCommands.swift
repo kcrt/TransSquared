@@ -58,9 +58,7 @@ struct AppMenuCommands: Commands {
                 Button("Clear History") {
                     viewModel?.clearHistory()
                 }
-                .disabled(viewModel == nil
-                    || viewModel!.isSessionActive
-                    || !viewModel!.hasTranscriptContent)
+                .disabled(clearHistoryDisabled)
             }
         }
 
@@ -113,23 +111,19 @@ struct AppMenuCommands: Commands {
                 viewModel?.swapLanguages()
             }
             .keyboardShortcut("s", modifiers: [.command, .shift])
-            .disabled(viewModel == nil || viewModel!.isSessionActive)
+            .disabled(viewModel?.isSessionActive ?? true)
 
             Divider()
 
             Button("Add Target Language") {
                 viewModel?.addTargetLanguage()
             }
-            .disabled(viewModel == nil
-                || viewModel!.isSessionActive
-                || viewModel!.targetCount >= SessionViewModel.maxTargetCount)
+            .disabled(addTargetDisabled)
 
             Button("Remove Target Language") {
                 viewModel?.removeTargetLanguage()
             }
-            .disabled(viewModel == nil
-                || viewModel!.isSessionActive
-                || viewModel!.targetCount <= 1)
+            .disabled(removeTargetDisabled)
 
             Divider()
 
@@ -140,7 +134,7 @@ struct AppMenuCommands: Commands {
         // Help menu
         CommandGroup(replacing: .help) {
             Link("TransTrans Support",
-                 destination: URL(string: "https://github.com/kcrt/TransTrans")!)
+                 destination: URL(staticString: "https://github.com/kcrt/TransTrans"))
         }
     }
 
@@ -166,7 +160,7 @@ struct AppMenuCommands: Commands {
                 }
             }
         }
-        .disabled(viewModel == nil || viewModel!.isSessionActive)
+        .disabled(viewModel?.isSessionActive ?? true)
     }
 
     @ViewBuilder
@@ -221,7 +215,7 @@ struct AppMenuCommands: Commands {
                 }
             }
         }
-        .disabled(viewModel == nil || viewModel!.isSessionActive)
+        .disabled(viewModel?.isSessionActive ?? true)
     }
 
     // MARK: - Bindings and Computed Helpers
@@ -242,6 +236,21 @@ struct AppMenuCommands: Commands {
 
     private var subtitleModeLabel: String {
         viewModel?.displayMode == .subtitle ? String(localized: "Normal Mode") : String(localized: "Subtitle Mode")
+    }
+
+    private var clearHistoryDisabled: Bool {
+        guard let vm = viewModel else { return true }
+        return vm.isSessionActive || !vm.hasTranscriptContent
+    }
+
+    private var addTargetDisabled: Bool {
+        guard let vm = viewModel else { return true }
+        return vm.isSessionActive || vm.targetCount >= SessionViewModel.maxTargetCount
+    }
+
+    private var removeTargetDisabled: Bool {
+        guard let vm = viewModel else { return true }
+        return vm.isSessionActive || vm.targetCount <= 1
     }
 
     private var subtitleButtonDisabled: Bool {

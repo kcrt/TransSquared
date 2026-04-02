@@ -59,8 +59,18 @@ final class SessionViewModel {
         return result
     }
 
-    /// Rolling audio level samples for waveform visualization (0.0–1.0).
-    var audioLevels: [Float] = Array(repeating: 0, count: 20)
+    /// Number of audio level samples kept for waveform visualization.
+    static let audioLevelSampleCount = 20
+    /// Ordered audio level samples for waveform visualization (oldest → newest, 0.0–1.0).
+    /// Backed by a ring buffer for O(1) writes; the ordered array is only constructed on read.
+    var audioLevels: [Float] {
+        let n = Self.audioLevelSampleCount
+        let start = audioLevelWriteIndex % n
+        if start == 0 { return audioLevelRingBuffer }
+        return Array(audioLevelRingBuffer[start...]) + Array(audioLevelRingBuffer[..<start])
+    }
+    private var audioLevelRingBuffer = Array(repeating: Float(0), count: audioLevelSampleCount)
+    private var audioLevelWriteIndex = 0
 
     // Language selection stored as String identifiers for reliable Picker binding.
     // Persisted via UserDefaults so the last-used languages are restored on relaunch.
@@ -83,7 +93,7 @@ final class SessionViewModel {
     // MARK: - Target Language Count
 
     /// Maximum number of target languages.
-    static let maxTargetCount = 5
+    static let maxTargetCount = 3
 
     /// Number of active target panes (1, 2, or 3).
     var targetCount: Int = {
@@ -127,15 +137,16 @@ final class SessionViewModel {
     var transcriptionTask: Task<Void, Never>?
     var audioLevelTask: Task<Void, Never>?
     var sentenceBoundaryTimer: Task<Void, Never>?
+    var sentenceBoundaryGeneration: UInt64 = 0
     var pendingSentenceBuffer = ""
     var sessionStartDate: Date?
     var segmentIndex = 0
 
-    static let partialTranslationDebounce: UInt64 = 300_000_000 // 0.3 seconds
+    static let partialTranslationDebounce: Duration = .milliseconds(300)
 
     // Sentence-ending punctuation characters
     static let sentenceEndChars: Set<Character> = [".", "。", "!", "?", "！", "？"]
-    static let sentenceBoundaryTimeout: UInt64 = 3_000_000_000 // 3 seconds in nanoseconds
+    static let sentenceBoundaryTimeout: Duration = .seconds(3)
 
     // MARK: - Device Monitoring
 
@@ -278,10 +289,8 @@ final class SessionViewModel {
                 if let levelStream = streams.audioLevels {
                     audioLevelTask = Task {
                         for await level in levelStream {
-                            audioLevels.append(level)
-                            if audioLevels.count > 20 {
-                                audioLevels.removeFirst(audioLevels.count - 20)
-                            }
+                            audioLevelRingBuffer[audioLevelWriteIndex % Self.audioLevelSampleCount] = level
+                            audioLevelWriteIndex += 1
                         }
                     }
                 }
@@ -328,7 +337,8 @@ final class SessionViewModel {
         for slot in 0..<translationSlots.count {
             translationSlots[slot].reset()
         }
-        audioLevels = Array(repeating: 0, count: 20)
+        audioLevelRingBuffer = Array(repeating: 0, count: Self.audioLevelSampleCount)
+        audioLevelWriteIndex = 0
         logger.info("Session stopped (source lines: \(self.sourceLines.count), target lines: \(self.translationSlots[0].lines.count))")
     }
 

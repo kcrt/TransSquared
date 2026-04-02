@@ -3,7 +3,7 @@ import CoreMedia
 import Speech
 import os
 
-private let logger = Logger.app("AudioCapture")
+private let logger = Logger.app("AudioCaptureDelegate")
 
 // MARK: - Delegate for handling audio sample buffers
 
@@ -120,8 +120,11 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
 
         // Compute RMS level for waveform visualization
         if let rms = outputBuffer.rmsLevel() {
-            // Normalize: typical speech RMS ~0.01–0.3, scale to 0–1
-            let normalized = min(rms * 5.0, 1.0)
+            // Convert to decibels, then map to 0–1 for display.
+            // Floor at –50 dB (silence); 0 dB (full-scale) maps to 1.0.
+            let db = 20 * log10(max(rms, 1e-10))
+            let floor: Float = -50
+            let normalized = max(0, min(1, (db - floor) / -floor))
             levelContinuation.yield(normalized)
         }
 

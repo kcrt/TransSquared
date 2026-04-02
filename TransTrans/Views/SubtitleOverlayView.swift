@@ -12,15 +12,27 @@ struct SubtitleOverlayView: View {
     private static let expirationInterval: TimeInterval = 30
 
     private var visibleLines: [TranscriptLine] {
-        lines.filter { line in
-            // Never show separator lines in subtitle mode
-            if line.isSeparator { return false }
-            // Always show partial (in-progress) lines
-            if line.isPartial { return true }
-            // Show finalized lines that haven't expired yet
-            guard let finalizedAt = line.finalizedAt else { return true }
-            return now.timeIntervalSince(finalizedAt) < Self.expirationInterval
+        // Scan from the end — lines are chronological, so once we hit an expired
+        // finalized line all earlier lines are also expired. This is O(k) where k
+        // is the number of visible lines, not O(n) for the entire history.
+        var result: [TranscriptLine] = []
+        for line in lines.reversed() {
+            if line.isSeparator { continue }
+            if line.isPartial {
+                result.append(line)
+                continue
+            }
+            guard let finalizedAt = line.finalizedAt else {
+                result.append(line)
+                continue
+            }
+            if now.timeIntervalSince(finalizedAt) < Self.expirationInterval {
+                result.append(line)
+            } else {
+                break
+            }
         }
+        return result.reversed()
     }
 
     var body: some View {

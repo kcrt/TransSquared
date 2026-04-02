@@ -43,13 +43,12 @@ struct AudioWaveformView: View {
     var levels: [Float]
     var isActive: Bool
 
-    private let barCount = 20
     private let barSpacing: CGFloat = 1
 
     var body: some View {
         HStack(spacing: barSpacing) {
-            ForEach(0..<barCount, id: \.self) { index in
-                let level = index < levels.count ? CGFloat(levels[index]) : 0
+            ForEach(levels.indices, id: \.self) { index in
+                let level = CGFloat(levels[index])
                 RoundedRectangle(cornerRadius: 0.5)
                     .fill(barColor(level: level))
                     .frame(width: 1, height: max(2, level * 28))
@@ -61,8 +60,9 @@ struct AudioWaveformView: View {
 
     private func barColor(level: CGFloat) -> Color {
         if !isActive { return .secondary }
-        if level > 0.7 { return .red }
-        if level > 0.4 { return .orange }
-        return .green
+        if level > 0.92 { return .red }
+        if level > 0.78 { return .orange }
+        if level > 0.2 { return .green }
+        return .gray   // below silence threshold (~-40 dB)
     }
 }
