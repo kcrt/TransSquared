@@ -210,35 +210,12 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
         pcmBuffer.frameLength = frameCount
 
         do {
-            try sampleBuffer.withAudioBufferList { audioBufferList, _ in
-                let abl = audioBufferList.unsafePointer.pointee
-                let destABL = pcmBuffer.mutableAudioBufferList
-
-                let srcBufferCount = Int(abl.mNumberBuffers)
-                let dstBufferCount = Int(destABL.pointee.mNumberBuffers)
-                let count = min(srcBufferCount, dstBufferCount)
-
-                withUnsafePointer(to: &destABL.pointee.mBuffers) { dstBufPtr in
-                    withUnsafePointer(to: abl.mBuffers) { srcBufPtr in
-                        let srcBufs = UnsafeBufferPointer(
-                            start: srcBufPtr,
-                            count: srcBufferCount
-                        )
-                        let dstBufs = UnsafeMutableBufferPointer(
-                            start: UnsafeMutablePointer(mutating: dstBufPtr),
-                            count: dstBufferCount
-                        )
-                        for i in 0..<count {
-                            let bytesToCopy = min(srcBufs[i].mDataByteSize, dstBufs[i].mDataByteSize)
-                            if let srcData = srcBufs[i].mData, let dstData = dstBufs[i].mData {
-                                memcpy(dstData, srcData, Int(bytesToCopy))
-                            }
-                        }
-                    }
-                }
-            }
+            try sampleBuffer.copyPCMData(
+                fromRange: 0..<Int(frameCount),
+                into: pcmBuffer.mutableAudioBufferList
+            )
         } catch {
-            logger.error("withAudioBufferList failed: \(error.localizedDescription)")
+            logger.error("copyPCMData failed: \(error.localizedDescription)")
             return nil
         }
 
