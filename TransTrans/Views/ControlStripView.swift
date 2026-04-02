@@ -9,6 +9,7 @@ struct ControlStripView: View {
     @Bindable var viewModel: SessionViewModel
 
     var body: some View {
+        GlassEffectContainer {
         HStack(alignment: .top, spacing: 4) {
             // Column 1 (left): font size, spacer, network, pin
             VStack(spacing: 8) {
@@ -67,6 +68,8 @@ struct ControlStripView: View {
                 }
             }
             .frame(width: 28)
+            .padding(.vertical, 4)
+            .glassEffect(.regular, in: .rect(cornerRadius: 12))
 
             // Column 2 (right): waveform, rec/stop, mic, languages
             VStack(spacing: 8) {
@@ -114,31 +117,31 @@ struct ControlStripView: View {
                 Divider()
 
                 // Source language (FROM)
-                Menu {
-                    ForEach(viewModel.supportedSourceLocales, id: \.identifier) { locale in
-                        Button {
-                            logger.info("Source language selected: '\(locale.identifier)' (was '\(viewModel.sourceLocaleIdentifier)')")
-                            viewModel.sourceLocaleIdentifier = locale.identifier
-                            Task {
-                                await viewModel.updateTargetLanguages()
+                LanguageLabel(text: sourceLanguageLabel)
+                    .overlay {
+                        Menu {
+                            ForEach(viewModel.supportedSourceLocales, id: \.identifier) { locale in
+                                Button {
+                                    logger.info("Source language selected: '\(locale.identifier)' (was '\(viewModel.sourceLocaleIdentifier)')")
+                                    viewModel.sourceLocaleIdentifier = locale.identifier
+                                    Task {
+                                        await viewModel.updateTargetLanguages()
+                                    }
+                                } label: {
+                                    CheckmarkLabel(
+                                        title: locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier,
+                                        isSelected: viewModel.sourceLocaleIdentifier == locale.identifier
+                                    )
+                                }
                             }
                         } label: {
-                            CheckmarkLabel(
-                                title: locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier,
-                                isSelected: viewModel.sourceLocaleIdentifier == locale.identifier
-                            )
+                            Color.clear
                         }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
                     }
-                } label: {
-                    Text(sourceLanguageLabel)
-                        .font(.caption)
-                        .lineLimit(1)
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .disabled(viewModel.isSessionActive)
-                .help("Source Language")
+                    .disabled(viewModel.isSessionActive)
+                    .help("Source Language")
 
                 // Swap languages (only with single target)
                 if viewModel.targetCount == 1 {
@@ -185,9 +188,12 @@ struct ControlStripView: View {
                 }
             }
             .frame(width: 36)
+            .padding(.vertical, 4)
+            .glassEffect(.regular, in: .rect(cornerRadius: 12))
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
+        } // GlassEffectContainer
     }
 
     private var sourceLanguageLabel: String {
@@ -213,28 +219,28 @@ struct ControlStripView: View {
 
     @ViewBuilder
     private func targetPicker(slot: Int) -> some View {
-        Menu {
-            ForEach(viewModel.supportedTargetLanguages, id: \.minimalIdentifier) { language in
-                Button {
-                    logger.info("Target \(slot) selected: '\(language.minimalIdentifier)' (was '\(viewModel.targetLanguageIdentifiers[slot])')")
-                    viewModel.targetLanguageIdentifiers[slot] = language.minimalIdentifier
+        LanguageLabel(text: viewModel.targetLanguageIdentifiers[slot])
+            .overlay {
+                Menu {
+                    ForEach(viewModel.supportedTargetLanguages, id: \.minimalIdentifier) { language in
+                        Button {
+                            logger.info("Target \(slot) selected: '\(language.minimalIdentifier)' (was '\(viewModel.targetLanguageIdentifiers[slot])')")
+                            viewModel.targetLanguageIdentifiers[slot] = language.minimalIdentifier
+                        } label: {
+                            CheckmarkLabel(
+                                title: displayName(for: language),
+                                isSelected: viewModel.targetLanguageIdentifiers[slot] == language.minimalIdentifier
+                            )
+                        }
+                    }
                 } label: {
-                    CheckmarkLabel(
-                        title: displayName(for: language),
-                        isSelected: viewModel.targetLanguageIdentifiers[slot] == language.minimalIdentifier
-                    )
+                    Color.clear
                 }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
             }
-        } label: {
-            Text(viewModel.targetLanguageIdentifiers[slot].uppercased())
-                .font(.caption)
-                .lineLimit(1)
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .disabled(viewModel.isSessionActive)
-        .help("Target Language \(slot + 1)")
+            .disabled(viewModel.isSessionActive)
+            .help("Target Language \(slot + 1)")
     }
 }
 // MARK: - Save Transcript Menu Items (shared between context menu and control strip)
@@ -252,6 +258,24 @@ struct SaveTranscriptMenuItems: View {
         }
         Button("Both (Interleaved)") {
             viewModel.saveTranscript(contentType: .both)
+        }
+    }
+}
+
+// MARK: - Language Label
+
+/// Displays a language identifier centered in the control strip column.
+/// Hyphenated codes (e.g. "zh-Hans") split into two centered lines.
+private struct LanguageLabel: View {
+    let text: String
+
+    var body: some View {
+        let parts = text.uppercased().split(separator: "-")
+        VStack(alignment: .center, spacing: 0) {
+            ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
+                Text(part)
+                    .font(.caption)
+            }
         }
     }
 }
