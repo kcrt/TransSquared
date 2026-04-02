@@ -184,13 +184,15 @@ extension SessionViewModel {
         } catch is CancellationError {
             // Task was cancelled (e.g. session stopped) — not a real failure.
             logger.info("Slot \(slot) translation cancelled")
-        } catch let error where "\(error)".contains("alreadyCancelled") {
+        } catch let error as NSError where error.domain.contains("Translation") || "\(error)".contains("alreadyCancelled") {
             // The translation session was invalidated/replaced while this request was in flight.
+            // Primary match: NSError domain containing "Translation" (covers framework errors).
+            // Fallback: string match for "alreadyCancelled" in case the error type changes.
             // Re-enqueue the item so the next session can pick it up.
-            logger.info("Slot \(slot) translation session already cancelled, re-enqueueing")
+            logger.info("Slot \(slot) translation session cancelled (domain: \(error.domain), code: \(error.code)), re-enqueueing")
             if slot < translationSlots.count {
                 translationSlots[slot].queue.insert(
-                    (sentence: sentence, targetIndex: targetIndex, isPartial: isPartial), at: 0
+                    TranslationQueueItem(sentence: sentence, targetIndex: targetIndex, isPartial: isPartial), at: 0
                 )
             }
         } catch {

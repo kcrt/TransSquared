@@ -126,8 +126,11 @@ final class AudioCaptureService {
         captureSession?.stopRunning()
         captureSession = nil
 
-        // Flush any remaining accumulated audio before finishing the stream
-        delegate?.flushAccumulationBuffer()
+        // Flush on the capture queue to avoid racing with captureOutput callbacks
+        let delegateToFlush = delegate
+        captureQueue.sync {
+            delegateToFlush?.flushAccumulationBuffer()
+        }
         delegate = nil
 
         inputContinuation?.finish()

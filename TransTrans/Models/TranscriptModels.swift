@@ -43,7 +43,7 @@ enum PermissionIssue: Identifiable {
 }
 
 /// A single line of transcribed/translated text displayed in the UI.
-struct TranscriptLine: Identifiable {
+struct TranscriptLine: Identifiable, Sendable {
     let id = UUID()
     var text: String
     var isPartial: Bool
@@ -76,11 +76,18 @@ struct AutoReplacement: Codable, Identifiable, Equatable {
     var to: String
 }
 
+/// A queued translation request for a single sentence.
+struct TranslationQueueItem: Sendable {
+    let sentence: String
+    let targetIndex: Int
+    let isPartial: Bool
+}
+
 /// Encapsulates the mutable translation state for one target language slot.
 /// Used for both the single-pane target and each multi-pane target.
 struct TranslationSlot {
     var lines: [TranscriptLine] = []
-    var queue: [(sentence: String, targetIndex: Int, isPartial: Bool)] = []
+    var queue: [TranslationQueueItem] = []
     var partialTargetIndex: Int = -1
     var partialTranslationTimer: Task<Void, Never>? = nil
     var config: TranslationSession.Configuration? = nil
@@ -109,7 +116,7 @@ struct TranslationSlot {
             partialTargetIndex = resetPartialIndex ? -1 : targetIndex
         }
 
-        queue.append((sentence: sentence, targetIndex: targetIndex, isPartial: isPartial))
+        queue.append(TranslationQueueItem(sentence: sentence, targetIndex: targetIndex, isPartial: isPartial))
         // Only invalidate when no session is actively processing — the running session's
         // while-loop will naturally pick up newly enqueued items without needing a restart.
         if !isProcessing {

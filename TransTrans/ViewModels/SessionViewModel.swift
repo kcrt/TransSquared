@@ -87,11 +87,8 @@ final class SessionViewModel {
 
     /// Number of active target panes (1, 2, or 3).
     var targetCount: Int = {
-        // Migration: read new key first, then legacy "multiTargetCount"
         let stored = UserDefaults.standard.integer(forKey: "targetCount")
         if stored >= 1 && stored <= 3 { return stored }
-        let legacy = UserDefaults.standard.integer(forKey: "multiTargetCount")
-        if legacy >= 2 && legacy <= 3 { return legacy }
         return 1
     }() {
         didSet { UserDefaults.standard.set(targetCount, forKey: "targetCount") }
@@ -99,16 +96,10 @@ final class SessionViewModel {
 
     /// Target language identifiers for all slots (always 3 elements; only first `targetCount` are active).
     var targetLanguageIdentifiers: [String] = {
-        // Try new key first, then legacy key
         if let stored = UserDefaults.standard.array(forKey: "targetLanguageIdentifiers") as? [String], stored.count >= 3 {
             return stored
         }
-        if let stored = UserDefaults.standard.array(forKey: "multiTargetLanguageIdentifiers") as? [String], stored.count >= 3 {
-            return stored
-        }
-        // Migration: use old single-target UserDefault for slot 0
-        let slot0 = UserDefaults.standard.string(forKey: "targetLanguageIdentifier") ?? "en"
-        return [slot0, "zh-Hans", "ko"]
+        return ["en", "zh-Hans", "ko"]
     }() {
         didSet { UserDefaults.standard.set(targetLanguageIdentifiers, forKey: "targetLanguageIdentifiers") }
     }
@@ -117,7 +108,7 @@ final class SessionViewModel {
 
     /// Whether there is any transcript content (source or translation) to export or clear.
     var hasTranscriptContent: Bool {
-        !sourceLines.isEmpty || !translationSlots[0].lines.isEmpty
+        !sourceLines.isEmpty || translationSlots.first?.lines.isEmpty == false
     }
 
     var sourceLocale: Locale {
@@ -242,7 +233,9 @@ final class SessionViewModel {
         case .authorized:
             break
         @unknown default:
-            break
+            logger.warning("Unknown microphone authorization status: \(micStatus.rawValue)")
+            permissionIssue = .microphone
+            return false
         }
 
         // Check speech recognition access
@@ -266,7 +259,9 @@ final class SessionViewModel {
         case .authorized:
             break
         @unknown default:
-            break
+            logger.warning("Unknown speech recognition authorization status: \(speechStatus.rawValue)")
+            permissionIssue = .speechRecognition
+            return false
         }
 
         return true
@@ -528,8 +523,6 @@ final class SessionViewModel {
             ?? candidates.first(where: { $0.region == likely })
             ?? candidates.first
     }
-
-    // MARK: - Font Size
 
     // MARK: - Display Mode
 

@@ -195,10 +195,6 @@ struct ControlStripView: View {
         return locale.language.languageCode?.identifier.uppercased() ?? viewModel.sourceLocaleIdentifier
     }
 
-    private var targetLanguageLabel: String {
-        viewModel.targetLanguageIdentifier.uppercased()
-    }
-
     private func displayName(for language: Locale.Language) -> String {
         let identifier = language.minimalIdentifier
         // Use forIdentifier to distinguish scripts (e.g. "Chinese, Simplified" vs "Chinese, Traditional")

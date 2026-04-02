@@ -31,7 +31,6 @@ struct ContentView: View {
             // Right control strip
             ControlStripView(viewModel: viewModel)
         }
-        .glassEffect(.regular, in: .rect)
         .frame(minWidth: 320, minHeight: viewModel.targetCount > 1 ? 320 : 200)
         .translationTask(viewModel.translationSlots.indices.contains(0) ? viewModel.translationSlots[0].config : nil) { session in
             await viewModel.handleTranslationSession(session, slot: 0)

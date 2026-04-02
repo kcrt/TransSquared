@@ -6,6 +6,7 @@ import SwiftUI
 @MainActor
 final class SubtitleWindowController {
     private var window: NSWindow?
+    private var hostingView: NSHostingView<SubtitleOverlayView>?
     private var viewModel: SessionViewModel?
 
     /// Called when the user wants to exit subtitle mode (e.g. via ⌘D while overlay is shown).
@@ -43,7 +44,9 @@ final class SubtitleWindowController {
         // Allow the panel to accept mouse events for text selection but not become key
         panel.becomesKeyOnlyIfNeeded = true
 
-        panel.contentView = makeSubtitleHostingView()
+        let hosting = makeSubtitleHostingView()
+        self.hostingView = hosting
+        panel.contentView = hosting
         panel.orderFrontRegardless()
 
         self.window = panel
@@ -57,8 +60,8 @@ final class SubtitleWindowController {
             return event
         }
 
-        // Keep content up-to-date using a periodic timer
-        // (SwiftUI @Observable changes won't propagate to the detached hosting view automatically)
+        // Keep content up-to-date using a periodic timer.
+        // Update the existing hosting view's rootView instead of recreating it each tick.
         startUpdateTimer()
     }
 
@@ -71,6 +74,7 @@ final class SubtitleWindowController {
         updateTimer = nil
         window?.orderOut(nil)
         window = nil
+        hostingView = nil
         viewModel = nil
     }
 
@@ -92,8 +96,13 @@ final class SubtitleWindowController {
     }
 
     private func updateContent() {
-        guard viewModel != nil, let window else { return }
-        window.contentView = makeSubtitleHostingView()
+        guard let viewModel, let hostingView else { return }
+        hostingView.rootView = SubtitleOverlayView(
+            lines: viewModel.translationSlots.first?.lines ?? [],
+            fontSize: viewModel.fontSize,
+            now: Date(),
+            onDismiss: { [weak self] in self?.onDismiss?() }
+        )
     }
 
     private func makeSubtitleHostingView() -> NSHostingView<SubtitleOverlayView> {

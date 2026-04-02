@@ -116,7 +116,7 @@ struct TranslationSlotTests {
 
     @Test func resetClearsState() {
         var slot = TranslationSlot()
-        slot.queue.append((sentence: "test", targetIndex: 0, isPartial: false))
+        slot.queue.append(TranslationQueueItem(sentence: "test", targetIndex: 0, isPartial: false))
         slot.partialTargetIndex = 5
 
         slot.reset()
@@ -407,5 +407,155 @@ struct ExportTests {
         vm.clearHistory()
         #expect(vm.sourceLines.isEmpty)
         #expect(vm.translationSlots[0].lines.isEmpty)
+    }
+}
+
+// MARK: - 8. TranslationSlot — enqueueTranslation Tests
+
+struct EnqueueTranslationTests {
+
+    @Test func enqueueCreatesPlaceholderLine() {
+        var slot = TranslationSlot()
+        let idx = slot.enqueueTranslation(sentence: "Hello", isPartial: false)
+        #expect(slot.lines.count == 1)
+        #expect(slot.lines[0].isPartial == true)
+        #expect(slot.lines[0].text == "…")
+        #expect(slot.queue.count == 1)
+        #expect(slot.queue[0].sentence == "Hello")
+        #expect(slot.queue[0].targetIndex == idx)
+        #expect(slot.queue[0].isPartial == false)
+    }
+
+    @Test func enqueuePartialReusesExistingPartialLine() {
+        var slot = TranslationSlot()
+        let idx1 = slot.enqueueTranslation(sentence: "Hel", isPartial: true)
+        let idx2 = slot.enqueueTranslation(sentence: "Hello", isPartial: true)
+        // Should reuse the same placeholder line
+        #expect(idx1 == idx2)
+        #expect(slot.lines.count == 1)
+        #expect(slot.queue.count == 2)
+    }
+
+    @Test func enqueueFinalResetsPartialIndex() {
+        var slot = TranslationSlot()
+        let partialIdx = slot.enqueueTranslation(sentence: "Hel", isPartial: true)
+        let finalIdx = slot.enqueueTranslation(sentence: "Hello.", isPartial: false, resetPartialIndex: true)
+        // Final reuses the existing partial line but resets partialTargetIndex
+        #expect(partialIdx == finalIdx)
+        #expect(slot.partialTargetIndex == -1)
+    }
+
+    @Test func enqueueSkipsInvalidateWhenProcessing() {
+        var slot = TranslationSlot()
+        // Simulate a processing session — config should not be invalidated
+        slot.isProcessing = true
+        // No config set, so invalidate would be a no-op anyway, but verify the flag is respected
+        slot.enqueueTranslation(sentence: "Test", isPartial: false)
+        #expect(slot.queue.count == 1)
+        #expect(slot.isProcessing == true)
+    }
+
+    @Test func enqueueAppendsNewLineWhenNoPartialExists() {
+        var slot = TranslationSlot()
+        // Add a finalized line first
+        slot.lines.append(TranscriptLine(text: "Done", isPartial: false))
+        slot.partialTargetIndex = -1
+        let idx = slot.enqueueTranslation(sentence: "Next", isPartial: true)
+        #expect(idx == 1) // New line appended after existing
+        #expect(slot.lines.count == 2)
+    }
+}
+
+// MARK: - 9. TranslationQueueItem Tests
+
+struct TranslationQueueItemTests {
+
+    @Test func propertiesAreStored() {
+        let item = TranslationQueueItem(sentence: "Hello", targetIndex: 3, isPartial: true)
+        #expect(item.sentence == "Hello")
+        #expect(item.targetIndex == 3)
+        #expect(item.isPartial == true)
+    }
+}
+
+// MARK: - 10. SessionViewModel — Language Swap Tests
+
+@MainActor
+struct LanguageSwapTests {
+
+    @Test func swapIsDisabledDuringActiveSession() {
+        let vm = SessionViewModel()
+        vm.isSessionActive = true
+        let oldSource = vm.sourceLocaleIdentifier
+        let oldTarget = vm.targetLanguageIdentifier
+        vm.swapLanguages()
+        // Should be no-op when session is active
+        #expect(vm.sourceLocaleIdentifier == oldSource)
+        #expect(vm.targetLanguageIdentifier == oldTarget)
+    }
+
+    @Test func swapWithEmptyLocalesIsNoOp() {
+        let vm = SessionViewModel()
+        vm.supportedSourceLocales = []
+        let oldSource = vm.sourceLocaleIdentifier
+        let oldTarget = vm.targetLanguageIdentifier
+        vm.swapLanguages()
+        // No candidates found, swap should be no-op
+        #expect(vm.sourceLocaleIdentifier == oldSource)
+        // Target may or may not change depending on old source lang code
+    }
+
+    @Test func swapWithMatchingLocalesSwapsCorrectly() {
+        let vm = SessionViewModel()
+        vm.isSessionActive = false
+        // Set up locales: source=ja_JP, target=en
+        vm.sourceLocaleIdentifier = "ja_JP"
+        vm.targetLanguageIdentifier = "en"
+        // Provide both locales as supported sources
+        vm.supportedSourceLocales = [
+            Locale(identifier: "ja_JP"),
+            Locale(identifier: "en_US"),
+        ]
+        vm.swapLanguages()
+        // Source should now be en_US (matched from target "en")
+        #expect(vm.sourceLocaleIdentifier == "en_US")
+        // Target should now be ja (from old source ja_JP's language code)
+        #expect(vm.targetLanguageIdentifier == "ja")
+    }
+}
+
+// MARK: - 11. SessionViewModel — hasTranscriptContent
+
+@MainActor
+struct HasTranscriptContentTests {
+
+    @Test func emptyStateReturnsFalse() {
+        let vm = SessionViewModel()
+        vm.sourceLines = []
+        vm.translationSlots = [TranslationSlot()]
+        #expect(vm.hasTranscriptContent == false)
+    }
+
+    @Test func withSourceLinesReturnsTrue() {
+        let vm = SessionViewModel()
+        vm.sourceLines = [TranscriptLine(text: "Hello", isPartial: false)]
+        vm.translationSlots = [TranslationSlot()]
+        #expect(vm.hasTranscriptContent == true)
+    }
+
+    @Test func withTranslationLinesReturnsTrue() {
+        let vm = SessionViewModel()
+        vm.sourceLines = []
+        vm.translationSlots = [TranslationSlot()]
+        vm.translationSlots[0].lines = [TranscriptLine(text: "Hello", isPartial: false)]
+        #expect(vm.hasTranscriptContent == true)
+    }
+
+    @Test func withEmptySlotsArrayReturnsFalseNotCrash() {
+        let vm = SessionViewModel()
+        vm.sourceLines = []
+        vm.translationSlots = []
+        // Should not crash, should return false
+        #expect(vm.hasTranscriptContent == false)
     }
 }
