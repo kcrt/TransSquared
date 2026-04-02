@@ -7,6 +7,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// When the main WindowGroup window is closed, also close any auxiliary panels
     /// (e.g. subtitle overlay) so the app terminates properly.
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Disable window tabbing — this app uses a single window, so
+        // the "Show Tab Bar" menu item is unnecessary.
+        NSWindow.allowsAutomaticWindowTabbing = false
+    }
+
     func applicationDidUpdate(_ notification: Notification) {
         let app = NSApplication.shared
         // Check if only non-activating panels remain (no regular windows).

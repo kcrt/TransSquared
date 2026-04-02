@@ -241,7 +241,7 @@ struct AppMenuCommands: Commands {
     }
 
     private var subtitleModeLabel: String {
-        viewModel?.displayMode == .subtitle ? "Normal Mode" : "Subtitle Mode"
+        viewModel?.displayMode == .subtitle ? String(localized: "Normal Mode") : String(localized: "Subtitle Mode")
     }
 
     private var subtitleButtonDisabled: Bool {

@@ -178,7 +178,7 @@ private struct AutoReplaceTab: View {
                             Image(systemName: "arrow.right")
                                 .foregroundStyle(.secondary)
                                 .frame(width: 20)
-                            Text(rule.to.isEmpty ? "(delete)" : rule.to)
+                            Text(rule.to.isEmpty ? String(localized: "(delete)") : rule.to)
                                 .foregroundStyle(rule.to.isEmpty ? .secondary : .primary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Button {

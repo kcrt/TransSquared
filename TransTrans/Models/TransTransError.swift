@@ -13,13 +13,13 @@ enum TransTransError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .alreadyCapturing:
-            return "Audio capture is already in progress."
+            return String(localized: "Audio capture is already in progress.")
         case .microphoneUnavailable:
-            return "Microphone is not available."
+            return String(localized: "Microphone is not available.")
         case .alreadyRunning:
-            return "Transcription is already running."
+            return String(localized: "Transcription is already running.")
         case .audioFormatUnavailable:
-            return "No compatible audio format available. Assets may need to be installed."
+            return String(localized: "No compatible audio format available. Assets may need to be installed.")
         }
     }
 }

@@ -28,7 +28,7 @@ extension ContentView {
                 Button {
                     viewModel.selectedMicrophoneID = ""
                 } label: {
-                    CheckmarkLabel(title: "System Default", isSelected: viewModel.selectedMicrophoneID.isEmpty)
+                    CheckmarkLabel(title: String(localized: "System Default"), isSelected: viewModel.selectedMicrophoneID.isEmpty)
                 }
                 Divider()
                 ForEach(viewModel.availableMicrophones, id: \.uniqueID) { device in
@@ -72,7 +72,7 @@ extension ContentView {
                 viewModel.toggleDisplayMode()
             } label: {
                 Label(
-                    viewModel.displayMode == .subtitle ? "Normal Mode" : "Subtitle Mode",
+                    viewModel.displayMode == .subtitle ? String(localized: "Normal Mode") : String(localized: "Subtitle Mode"),
                     systemImage: viewModel.displayMode == .subtitle ? "captions.bubble.fill" : "captions.bubble"
                 )
             }
@@ -88,9 +88,7 @@ extension ContentView {
             .help("Always on Top (⌘T)")
         }
 
-        ToolbarSpacer(.fixed)
-
-        // Group 4: Language controls
+        // Group 4: Language controls — source
         ToolbarItemGroup {
             Menu {
                 ForEach(viewModel.supportedSourceLocales, id: \.identifier) { locale in
@@ -113,8 +111,11 @@ extension ContentView {
             }
             .disabled(viewModel.isSessionActive)
             .help("Source Language")
+        }
 
-            if viewModel.targetCount == 1 {
+        // Swap / arrow
+        if viewModel.targetCount == 1 {
+            ToolbarItem {
                 Button {
                     viewModel.swapLanguages()
                 } label: {
@@ -122,12 +123,17 @@ extension ContentView {
                 }
                 .disabled(viewModel.isSessionActive)
                 .help("Swap Languages (⌘⇧S)")
-            } else {
-                Image(systemName: "arrow.right")
-                    .foregroundStyle(.secondary)
-                    .help("Source → Target")
             }
+        } else {
+            ToolbarItem {
+                Text("→")
+                    .foregroundStyle(.secondary)
+            }
+            .sharedBackgroundVisibility(.hidden)
+        }
 
+        // Language controls — targets
+        ToolbarItemGroup {
             ForEach(0..<viewModel.targetCount, id: \.self) { slot in
                 targetLanguageMenu(slot: slot)
             }
@@ -169,12 +175,7 @@ extension ContentView {
                 Label("Smaller", systemImage: "textformat.size.smaller")
             }
             .help("Decrease Font Size (⌘-)")
-        }
 
-        ToolbarSpacer(.fixed)
-
-        // Group 6: Settings
-        ToolbarItem {
             Button {
                 viewModel.showSettings.toggle()
             } label: {
@@ -218,12 +219,12 @@ extension ContentView {
 
     var microphoneHelpText: String {
         if viewModel.selectedMicrophoneID.isEmpty {
-            return "Microphone: System Default"
+            return String(localized: "Microphone: System Default")
         }
         if let device = viewModel.selectedMicrophone {
-            return "Microphone: \(device.localizedName)"
+            return String(localized: "Microphone: \(device.localizedName)")
         }
-        return "Microphone"
+        return String(localized: "Microphone")
     }
 
     var subtitleButtonDisabled: Bool {
