@@ -83,7 +83,7 @@ final class SessionViewModel {
     // MARK: - Target Language Count
 
     /// Maximum number of target languages.
-    static let maxTargetCount = 3
+    static let maxTargetCount = 5
 
     /// Number of active target panes (1, 2, or 3).
     var targetCount: Int = {
@@ -529,7 +529,7 @@ final class SessionViewModel {
     func toggleDisplayMode() {
         if displayMode == .subtitle {
             displayMode = .normal
-        } else if isSessionActive {
+        } else if isSessionActive && targetCount <= 1 {
             displayMode = .subtitle
         }
     }

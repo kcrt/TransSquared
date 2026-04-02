@@ -26,6 +26,11 @@ struct ContentView: View {
         }
         .frame(minWidth: 320, minHeight: viewModel.targetCount > 1 ? 320 : 200)
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Text("TransTrans")
+                    .font(.headline)
+            }
+            .sharedBackgroundVisibility(.hidden)
             toolbarContent
         }
         .translationTask(viewModel.translationSlots.indices.contains(0) ? viewModel.translationSlots[0].config : nil) { session in
@@ -180,8 +185,8 @@ struct ContentView: View {
                     systemImage: viewModel.displayMode == .subtitle ? "captions.bubble.fill" : "captions.bubble"
                 )
             }
-            .disabled(!viewModel.isSessionActive && viewModel.displayMode != .subtitle)
-            .help(viewModel.displayMode == .subtitle ? "Normal Mode (⌘D)" : "Subtitle Mode (⌘D)")
+            .disabled(subtitleButtonDisabled)
+            .help(subtitleButtonHelp)
 
             Button {
                 viewModel.isAlwaysOnTop.toggle()
@@ -226,6 +231,10 @@ struct ContentView: View {
                 }
                 .disabled(viewModel.isSessionActive)
                 .help("Swap Languages (⌘⇧S)")
+            } else {
+                Image(systemName: "arrow.right")
+                    .foregroundStyle(.secondary)
+                    .help("Source → Target")
             }
 
             ForEach(0..<viewModel.targetCount, id: \.self) { slot in
@@ -309,13 +318,13 @@ struct ContentView: View {
 
     private var sourceLanguageLabel: String {
         let locale = Locale(identifier: viewModel.sourceLocaleIdentifier)
-        return locale.language.languageCode?.identifier.uppercased() ?? viewModel.sourceLocaleIdentifier
+        return locale.language.minimalIdentifier.uppercased()
     }
 
     private var sourcePlaceholder: String {
         let langName = Locale.current.localizedString(forIdentifier: viewModel.sourceLocaleIdentifier)
             ?? viewModel.sourceLocaleIdentifier
-        return String(localized: "TransTrans — Press \u{2318}R to start transcription of \(langName)")
+        return String(localized: "Press \u{2318}R to start transcription of \(langName)")
     }
 
     private func displayName(for language: Locale.Language) -> String {
@@ -331,6 +340,22 @@ struct ContentView: View {
             return "Microphone: \(device.localizedName)"
         }
         return "Microphone"
+    }
+
+    private var subtitleButtonDisabled: Bool {
+        if viewModel.displayMode == .subtitle { return false }
+        if !viewModel.isSessionActive { return true }
+        return viewModel.targetCount > 1
+    }
+
+    private var subtitleButtonHelp: String {
+        if viewModel.displayMode == .subtitle {
+            return String(localized: "Normal Mode (⌘D)")
+        }
+        if viewModel.targetCount > 1 {
+            return String(localized: "Subtitle mode is available only with a single destination language")
+        }
+        return String(localized: "Subtitle Mode (⌘D)")
     }
 
     // MARK: - Keyboard Shortcuts
