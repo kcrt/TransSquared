@@ -473,8 +473,15 @@ final class SessionViewModel {
         }
 
         isSessionActive = false
+        // Clean up timers and partial state, but keep queue and config alive
+        // so that pending/in-flight translations can still complete.
+        // startSession() replaces translationSlots entirely, so no stale state leaks.
         for slot in 0..<translationSlots.count {
-            translationSlots[slot].reset()
+            translationSlots[slot].partialTranslationTimer?.cancel()
+            translationSlots[slot].partialTranslationTimer = nil
+            translationSlots[slot].pendingPartialText = nil
+            translationSlots[slot].pendingPartialElapsedTime = nil
+            translationSlots[slot].partialEntryID = nil
         }
         audioLevelRingBuffer = Array(repeating: 0, count: Self.audioLevelSampleCount)
         audioLevelWriteIndex = 0
