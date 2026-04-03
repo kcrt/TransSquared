@@ -89,8 +89,14 @@ final class AudioCaptureService {
         let (stream, continuation) = AsyncStream.makeStream(of: AnalyzerInput.self)
         self.inputContinuation = continuation
 
-        // Create audio level stream for waveform visualization
-        let (levelStream, levelCont) = AsyncStream.makeStream(of: Float.self)
+        // Create audio level stream for waveform visualization.
+        // Use .bufferingNewest(1) so the UI consumer always sees the latest
+        // sample instead of falling progressively behind when the main thread
+        // cannot keep up with the high-frequency audio callbacks.
+        let (levelStream, levelCont) = AsyncStream.makeStream(
+            of: Float.self,
+            bufferingPolicy: .bufferingNewest(1)
+        )
         self.audioLevelStream = levelStream
         self.levelContinuation = levelCont
 
