@@ -115,6 +115,7 @@ private struct VocabularyTab: View {
     private func addWord() {
         let trimmed = newWord.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
+        guard viewModel.currentContextualStrings.count < 100 else { return }
         guard !viewModel.currentContextualStrings.contains(trimmed) else {
             newWord = ""
             return
