@@ -180,8 +180,23 @@ private struct SheetsAndAlerts: ViewModifier {
                 allowsMultipleSelection: false
             ) { result in
                 if case .success(let urls) = result, let url = urls.first {
-                    viewModel.transcribeAudioFile(url: url)
+                    viewModel.requestFileTranscription(url: url)
                 }
+            }
+            .alert(
+                String(localized: "Existing Data Will Be Cleared",
+                       comment: "Title of confirmation alert when starting file transcription with existing transcript data"),
+                isPresented: $viewModel.showFileTranscriptionConfirmation
+            ) {
+                Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {
+                    viewModel.pendingFileTranscriptionURL = nil
+                }
+                Button(String(localized: "OK", comment: "OK button to confirm clearing data")) {
+                    viewModel.confirmFileTranscription()
+                }
+            } message: {
+                Text("Starting a new file transcription will clear the current transcript and translation data.",
+                     comment: "Message explaining that existing data will be lost when starting file transcription")
             }
             .fileExporter(
                 isPresented: $viewModel.isExporterPresented,

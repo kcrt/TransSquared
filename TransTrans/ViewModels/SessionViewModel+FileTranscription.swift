@@ -8,8 +8,8 @@ private let logger = Logger.app("FileTranscription")
 
 extension SessionViewModel {
 
-    /// Transcribes an audio file and feeds results into the existing transcript/translation pipeline.
-    func transcribeAudioFile(url: URL) {
+    /// Checks for existing transcript content and either shows a confirmation dialog or starts transcription directly.
+    func requestFileTranscription(url: URL) {
         guard !isSessionActive, !isTranscribingFile else {
             errorMessage = String(
                 localized: "Cannot transcribe a file while a session is active.",
@@ -18,20 +18,38 @@ extension SessionViewModel {
             return
         }
 
+        if hasTranscriptContent {
+            pendingFileTranscriptionURL = url
+            showFileTranscriptionConfirmation = true
+        } else {
+            transcribeAudioFile(url: url)
+        }
+    }
+
+    /// Confirms and starts file transcription, clearing existing data first.
+    func confirmFileTranscription() {
+        guard let url = pendingFileTranscriptionURL else { return }
+        pendingFileTranscriptionURL = nil
+
+        // Clear existing transcript data
+        sourceLines.removeAll()
+        for slot in 0..<translationSlots.count {
+            translationSlots[slot].lines.removeAll()
+            translationSlots[slot].queue.removeAll()
+        }
+        segmentIndex = 0
+        accumulatedElapsedTime = 0
+
+        transcribeAudioFile(url: url)
+    }
+
+    /// Transcribes an audio file and feeds results into the existing transcript/translation pipeline.
+    private func transcribeAudioFile(url: URL) {
         logger.info("Starting file transcription: \(url.lastPathComponent)")
 
         isTranscribingFile = true
         fileTranscriptionProgress = 0
         fileAudioDuration = 0
-
-        // Insert separator if there is existing content
-        if !sourceLines.isEmpty {
-            let separator = TranscriptLine(text: "", isPartial: false, isSeparator: true)
-            sourceLines.append(separator)
-            for slot in 0..<translationSlots.count {
-                translationSlots[slot].lines.append(separator)
-            }
-        }
 
         pendingSentenceBuffer = ""
         segmentIndex = 0

@@ -34,6 +34,9 @@ final class SessionViewModel {
     var audioFileTranscriber: AudioFileTranscriber?
     var fileTranscriptionProgress: Double = 0
     var fileAudioDuration: TimeInterval = 0
+    /// URL awaiting user confirmation before file transcription clears existing data.
+    var pendingFileTranscriptionURL: URL?
+    var showFileTranscriptionConfirmation = false
 
     /// Custom vocabulary words per source locale, keyed by locale identifier (persisted via UserDefaults).
     var contextualStringsByLocale: [String: [String]] = SessionViewModel.loadFromUserDefaults(forKey: "contextualStringsByLocale") ?? [:] {
