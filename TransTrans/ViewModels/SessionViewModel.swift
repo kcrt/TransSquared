@@ -19,7 +19,7 @@ final class SessionViewModel {
 
     /// Derived source lines for the UI, computed from entries.
     var sourceLines: [TranscriptLine] {
-        entries.compactMap { $0.sourceTranscriptLine() }
+        entries.flatMap { $0.sourceTranscriptLines() }
     }
 
     /// Derives translation lines for the given slot from entries.

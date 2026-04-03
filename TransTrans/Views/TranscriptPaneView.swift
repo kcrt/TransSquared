@@ -57,16 +57,24 @@ struct TranscriptPaneView: View {
     private func lineRow(_ line: TranscriptLine) -> some View {
         let isHighlighted = highlightedSentenceID != nil && line.sentenceID == highlightedSentenceID
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            if showElapsedTime, let elapsed = line.elapsedTime {
-                Text(formatElapsedTime(elapsed))
-                    .font(.system(size: fontSize * 0.75, design: .monospaced))
-                    .foregroundStyle(isHighlighted ? .secondary : .tertiary)
-                    .frame(minWidth: 40, alignment: .trailing)
-                    .onTapGesture {
-                        if let sentenceID = line.sentenceID {
-                            onTimestampTapped?(sentenceID)
+            if showElapsedTime {
+                if let elapsed = line.elapsedTime {
+                    Text(formatElapsedTime(elapsed))
+                        .font(.system(size: fontSize * 0.75, design: .monospaced))
+                        .foregroundStyle(isHighlighted ? .secondary : .tertiary)
+                        .frame(minWidth: 40, alignment: .trailing)
+                        .onTapGesture {
+                            if let sentenceID = line.sentenceID {
+                                onTimestampTapped?(sentenceID)
+                            }
                         }
-                    }
+                } else {
+                    // Reserve column space for alignment when no timestamp is available.
+                    Text("00:00")
+                        .font(.system(size: fontSize * 0.75, design: .monospaced))
+                        .frame(minWidth: 40, alignment: .trailing)
+                        .hidden()
+                }
             }
 
             if isEditable && editingLineID == line.id {

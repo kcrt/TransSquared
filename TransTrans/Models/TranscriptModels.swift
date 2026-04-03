@@ -93,30 +93,33 @@ struct TranscriptEntry: Identifiable, Sendable {
         self.isCommitted = isCommitted
     }
 
-    /// Derives a `TranscriptLine` for the source pane, or `nil` if the entry has no displayable content.
-    func sourceTranscriptLine() -> TranscriptLine? {
+    /// Derives `TranscriptLine`(s) for the source pane.
+    /// When both finalized text and a pending partial exist, they are returned as
+    /// **separate lines** so the finalized text stays stable and the partial appears below it.
+    func sourceTranscriptLines() -> [TranscriptLine] {
         if isSeparator {
-            return TranscriptLine(id: id, text: "", isPartial: false, isSeparator: true)
+            return [TranscriptLine(id: id, text: "", isPartial: false, isSeparator: true)]
         }
-        let displayText: String
-        let isDisplayPartial: Bool
-        if let partial = pendingPartial {
-            displayText = source.text.isEmpty ? partial : source.text + partial
-            isDisplayPartial = true
-        } else if !source.text.isEmpty {
-            displayText = source.text
-            isDisplayPartial = false
-        } else {
-            return nil
+        var lines: [TranscriptLine] = []
+        if !source.text.isEmpty {
+            lines.append(TranscriptLine(
+                id: source.id,
+                text: source.text,
+                isPartial: false,
+                elapsedTime: elapsedTime,
+                duration: duration,
+                sentenceID: isCommitted ? id : nil
+            ))
         }
-        return TranscriptLine(
-            id: source.id,
-            text: displayText,
-            isPartial: isDisplayPartial,
-            elapsedTime: elapsedTime,
-            duration: duration,
-            sentenceID: isCommitted ? id : nil
-        )
+        if let partial = pendingPartial, !partial.isEmpty {
+            lines.append(TranscriptLine(
+                id: source.text.isEmpty ? source.id : id,
+                text: partial,
+                isPartial: true,
+                elapsedTime: source.text.isEmpty ? elapsedTime : nil
+            ))
+        }
+        return lines
     }
 
     /// Derives a `TranscriptLine` for the translation pane of the given slot, or `nil` if no translation exists.

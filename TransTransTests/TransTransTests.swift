@@ -57,60 +57,64 @@ struct TranscriptEntryTests {
         #expect(entry.isSeparator == true)
     }
 
-    @Test func sourceTranscriptLineCommitted() {
+    @Test func sourceTranscriptLinesCommitted() {
         let entry = TranscriptEntry(
             source: TransString(text: "Hello world.", isPartial: false),
             elapsedTime: 10.0,
             duration: 2.0,
             isCommitted: true
         )
-        let line = entry.sourceTranscriptLine()
-        #expect(line != nil)
-        #expect(line?.text == "Hello world.")
-        #expect(line?.isPartial == false)
-        #expect(line?.elapsedTime == 10.0)
-        #expect(line?.sentenceID == entry.id)
+        let lines = entry.sourceTranscriptLines()
+        #expect(lines.count == 1)
+        #expect(lines[0].text == "Hello world.")
+        #expect(lines[0].isPartial == false)
+        #expect(lines[0].elapsedTime == 10.0)
+        #expect(lines[0].sentenceID == entry.id)
     }
 
-    @Test func sourceTranscriptLineWithPendingPartial() {
+    @Test func sourceTranscriptLinesWithPendingPartialShowsBothLines() {
+        // When source has finalized text and pendingPartial exists,
+        // they appear as two separate lines (finalized + partial).
         let entry = TranscriptEntry(
             source: TransString(text: "Hello.", isPartial: false),
             pendingPartial: " How are"
         )
-        let line = entry.sourceTranscriptLine()
-        #expect(line != nil)
-        #expect(line?.text == "Hello. How are")
-        #expect(line?.isPartial == true)
+        let lines = entry.sourceTranscriptLines()
+        #expect(lines.count == 2)
+        #expect(lines[0].text == "Hello.")
+        #expect(lines[0].isPartial == false)
+        #expect(lines[1].text == " How are")
+        #expect(lines[1].isPartial == true)
     }
 
-    @Test func sourceTranscriptLinePartialOnly() {
+    @Test func sourceTranscriptLinesPartialOnly() {
         let entry = TranscriptEntry(pendingPartial: "Hello")
-        let line = entry.sourceTranscriptLine()
-        #expect(line != nil)
-        #expect(line?.text == "Hello")
-        #expect(line?.isPartial == true)
+        let lines = entry.sourceTranscriptLines()
+        #expect(lines.count == 1)
+        #expect(lines[0].text == "Hello")
+        #expect(lines[0].isPartial == true)
     }
 
-    @Test func sourceTranscriptLineEmptyReturnsNil() {
+    @Test func sourceTranscriptLinesEmptyReturnsEmpty() {
         let entry = TranscriptEntry()
-        let line = entry.sourceTranscriptLine()
-        #expect(line == nil)
+        let lines = entry.sourceTranscriptLines()
+        #expect(lines.isEmpty)
     }
 
-    @Test func sourceTranscriptLineUncommittedHasNoSentenceID() {
+    @Test func sourceTranscriptLinesUncommittedHasNoSentenceID() {
         let entry = TranscriptEntry(
             source: TransString(text: "Hello", isPartial: false),
             isCommitted: false
         )
-        let line = entry.sourceTranscriptLine()
-        #expect(line?.sentenceID == nil)
+        let lines = entry.sourceTranscriptLines()
+        #expect(lines[0].sentenceID == nil)
     }
 
     @Test func separatorProducesSeparatorLine() {
         let entry = TranscriptEntry(isSeparator: true)
-        let line = entry.sourceTranscriptLine()
-        #expect(line != nil)
-        #expect(line?.isSeparator == true)
+        let lines = entry.sourceTranscriptLines()
+        #expect(lines.count == 1)
+        #expect(lines[0].isSeparator == true)
     }
 
     @Test func translationTranscriptLine() {

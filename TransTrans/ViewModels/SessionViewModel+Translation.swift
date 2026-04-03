@@ -105,12 +105,23 @@ extension SessionViewModel {
             return
         }
 
+        // Save pending partial — it belongs to the next utterance, not this one.
+        let carryOverPartial = entries[idx].pendingPartial
+        entries[idx].pendingPartial = nil
         entries[idx].isCommitted = true
 
         logger.debug("Committing sentence #\(self.segmentIndex): \"\(sentence, privacy: .private)\"")
 
         for slot in 0..<targetCount {
             commitSentenceForSlot(slot, entryIndex: idx, sentence: sentence)
+        }
+
+        // Carry over the pending partial to a new entry so it doesn't briefly disappear.
+        // ensureCurrentEntry() creates a new entry with currentElapsedTime, so the
+        // time label also appears immediately.
+        if let partial = carryOverPartial, !partial.isEmpty {
+            let newIdx = ensureCurrentEntry()
+            entries[newIdx].pendingPartial = partial
         }
     }
 
