@@ -55,6 +55,11 @@ extension SessionViewModel {
         accumulatedElapsedTime = 0
         sessionStartDate = Date()
 
+        // Clean up any previous playback state and keep the file URL for post-transcription playback.
+        playbackService?.cleanup()
+        playbackService = nil
+        recordingStartElapsedOffset = 0
+
         // Set up translation slots so committed sentences get translated.
         let slotCount = targetCount
         translationSlots = (0..<slotCount).map { i in
@@ -73,8 +78,10 @@ extension SessionViewModel {
         fileTranscriptionTask = Task {
             // Obtain access to the security-scoped resource from the file picker.
             let didStartAccess = url.startAccessingSecurityScopedResource()
+            // Track whether we should keep security-scoped access alive for playback.
+            var keepAccess = false
             defer {
-                if didStartAccess { url.stopAccessingSecurityScopedResource() }
+                if didStartAccess && !keepAccess { url.stopAccessingSecurityScopedResource() }
                 if let start = sessionStartDate {
                     accumulatedElapsedTime += Date().timeIntervalSince(start)
                 }
@@ -124,6 +131,10 @@ extension SessionViewModel {
                     try? await Task.sleep(for: .milliseconds(200))
                 }
 
+                // Keep the file URL and security-scoped access alive for playback.
+                currentRecordingURL = url
+                fileTranscriptionSourceURL = url
+                keepAccess = didStartAccess
                 logger.info("File transcription completed")
             } catch {
                 if !Task.isCancelled {
@@ -158,5 +169,15 @@ extension SessionViewModel {
         }
         pendingSentenceBuffer = ""
         isTranscribingFile = false
+        cleanupFileTranscriptionSource()
+    }
+
+    /// Releases security-scoped access to the file transcription source and clears the URL.
+    func cleanupFileTranscriptionSource() {
+        if let url = fileTranscriptionSourceURL {
+            url.stopAccessingSecurityScopedResource()
+            fileTranscriptionSourceURL = nil
+            logger.debug("Released security-scoped access for file transcription source")
+        }
     }
 }

@@ -86,13 +86,13 @@ actor AudioFileTranscriber {
                 do {
                     for try await result in transcriber.results {
                         let text = String(result.text.characters)
-                        let duration = extractAudioDuration(from: result.text)
+                        let timeInfo = extractAudioTimeInfo(from: result.text)
                         if result.isFinal {
-                            capturedLogger.info("Final: \"\(text)\" (duration: \(duration.map { String(format: "%.2fs", $0) } ?? "nil"))")
-                            continuation.yield(.finalized(text, duration: duration))
+                            capturedLogger.info("Final: \"\(text)\" (duration: \(timeInfo.map { String(format: "%.2fs", $0.duration) } ?? "nil"), offset: \(timeInfo.map { String(format: "%.2fs", $0.offset) } ?? "nil"))")
+                            continuation.yield(.finalized(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))
                         } else {
                             capturedLogger.debug("Partial: \"\(text)\"")
-                            continuation.yield(.partial(text, duration: duration))
+                            continuation.yield(.partial(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))
                         }
                     }
                     capturedLogger.info("Results stream ended")

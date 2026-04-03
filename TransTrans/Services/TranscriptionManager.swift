@@ -4,14 +4,22 @@ import CoreMedia
 import os
 
 enum TranscriptionEvent: Sendable {
-    case partial(String, duration: TimeInterval?)
-    case finalized(String, duration: TimeInterval?)
+    case partial(String, duration: TimeInterval?, audioOffset: TimeInterval?)
+    case finalized(String, duration: TimeInterval?, audioOffset: TimeInterval?)
     case error(String)
 }
 
-/// Extracts the total spoken-audio duration from a `SpeechTranscriber.Result`'s
+/// Timing information extracted from a `SpeechTranscriber.Result`'s `TimeRangeAttribute` runs.
+struct AudioTimeInfo: Sendable {
+    /// Start position within the audio source (seconds).
+    let offset: TimeInterval
+    /// Duration of the spoken audio (seconds).
+    let duration: TimeInterval
+}
+
+/// Extracts the audio start offset and total spoken-audio duration from a `SpeechTranscriber.Result`'s
 /// attributed string by reading `TimeRangeAttribute` runs.
-func extractAudioDuration(from text: AttributedString) -> TimeInterval? {
+func extractAudioTimeInfo(from text: AttributedString) -> AudioTimeInfo? {
     var minStart: CMTime?
     var maxEnd: CMTime?
     for run in text.runs {
@@ -26,8 +34,9 @@ func extractAudioDuration(from text: AttributedString) -> TimeInterval? {
         }
     }
     guard let start = minStart, let end = maxEnd else { return nil }
-    let seconds = CMTimeGetSeconds(CMTimeSubtract(end, start))
-    return seconds > 0 ? seconds : nil
+    let duration = CMTimeGetSeconds(CMTimeSubtract(end, start))
+    guard duration > 0 else { return nil }
+    return AudioTimeInfo(offset: CMTimeGetSeconds(start), duration: duration)
 }
 
 /// Streams returned by `TranscriptionManager.start()`.
@@ -128,13 +137,13 @@ actor TranscriptionManager {
                 for try await result in capturedTranscriber.results {
                     resultCount += 1
                     let text = String(result.text.characters)
-                    let duration = extractAudioDuration(from: result.text)
+                    let timeInfo = extractAudioTimeInfo(from: result.text)
                     if result.isFinal {
-                        logger.debug("Final result #\(resultCount): \"\(text, privacy: .private)\" (duration: \(duration.map { String(format: "%.2fs", $0) } ?? "nil"))")
-                        capturedContinuation.yield(.finalized(text, duration: duration))
+                        logger.debug("Final result #\(resultCount): \"\(text, privacy: .private)\" (duration: \(timeInfo.map { String(format: "%.2fs", $0.duration) } ?? "nil"))")
+                        capturedContinuation.yield(.finalized(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))
                     } else {
                         logger.debug("Partial result #\(resultCount): \"\(text, privacy: .private)\"")
-                        capturedContinuation.yield(.partial(text, duration: duration))
+                        capturedContinuation.yield(.partial(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))
                     }
                 }
                 logger.info("Transcriber results stream ended (total: \(resultCount))")

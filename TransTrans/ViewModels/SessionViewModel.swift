@@ -89,6 +89,8 @@ final class SessionViewModel {
     /// URL awaiting user confirmation before file transcription clears existing data.
     var pendingFileTranscriptionURL: URL?
     var showFileTranscriptionConfirmation = false
+    /// Security-scoped URL of the file transcription source, kept alive for post-transcription playback.
+    var fileTranscriptionSourceURL: URL?
 
     /// Custom vocabulary words per source locale, keyed by locale identifier (persisted via UserDefaults).
     var contextualStringsByLocale: [String: [String]] = SessionViewModel.loadFromUserDefaults(forKey: "contextualStringsByLocale") ?? [:] {
@@ -520,11 +522,14 @@ final class SessionViewModel {
         let audioTime = elapsedTime - recordingStartElapsedOffset
         guard audioTime >= 0 else { return }
 
+        // Look up the entry's duration for auto-stop
+        let duration = entries.first(where: { $0.id == entryID })?.duration
+
         // Toggle: stop if already playing this entry, otherwise play
         if playbackService?.playingEntryID == entryID && playbackService?.isPlaying == true {
             playbackService?.stop()
         } else {
-            playbackService?.play(from: audioTime, entryID: entryID)
+            playbackService?.play(from: audioTime, duration: duration, entryID: entryID)
         }
     }
 
@@ -535,6 +540,7 @@ final class SessionViewModel {
         recordingService?.cleanup()
         recordingService = nil
         currentRecordingURL = nil
+        cleanupFileTranscriptionSource()
     }
 
     // MARK: - Display Mode
