@@ -12,9 +12,22 @@ extension ContentView {
     var toolbarContent: some ToolbarContent {
         // Group 1: Waveform (standalone) + Rec/Stop split button + Mic
         ToolbarItemGroup {
-            // RMS Monitor — always visible, independent of the session button
-            AudioWaveformView(levels: viewModel.audioLevels, isActive: viewModel.isSessionActive)
-                .frame(width: 60, height: 20)
+            // RMS Monitor — always visible; click to open level monitor popover
+            Button {
+                viewModel.showAudioPopover.toggle()
+            } label: {
+                AudioWaveformView(levels: viewModel.audioLevels, isActive: viewModel.isSessionActive)
+                    .frame(width: 60, height: 20)
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: Bindable(viewModel).showAudioPopover) {
+                AudioLevelPopoverView(
+                    audioLevels: viewModel.audioLevels,
+                    isActive: viewModel.isSessionActive,
+                    silenceThreshold: SessionViewModel.silenceThreshold
+                )
+            }
+            .help("Audio Level Monitor")
 
             // Session toggle (split button): click to start/stop, dropdown to pick mode
             Menu {

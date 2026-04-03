@@ -74,6 +74,7 @@ final class SessionViewModel {
     var isAlwaysOnTop = false
     var errorMessage: String?
     var showSettings = false
+    var showAudioPopover = false
     var displayMode: DisplayMode = .normal
     var permissionIssue: PermissionIssue?
     /// The sentenceID currently highlighted across all panes (set by tapping a timestamp).

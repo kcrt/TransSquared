@@ -168,3 +168,11 @@ struct AudioLevelPopoverView: View {
         return .gray
     }
 }
+#Preview {
+    AudioLevelPopoverView(
+        audioLevels: (0..<20).map { _ in Float.random(in: 0...0.8) },
+        isActive: true,
+        silenceThreshold: 0.2
+    )
+}
+
