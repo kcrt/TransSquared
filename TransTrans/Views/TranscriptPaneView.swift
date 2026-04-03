@@ -13,8 +13,8 @@ struct TranscriptPaneView: View {
     var onTimestampTapped: ((UUID) -> Void)?
     /// The sentenceID currently highlighted across all panes.
     var highlightedSentenceID: UUID?
-    /// Whether a recording exists (enables play button on timestamp hover).
-    var hasRecording: Bool = false
+    /// Whether playback is available for this pane (recording for source, TTS for translation).
+    var canPlayback: Bool = false
     /// The entry ID currently being played back (for stop icon display).
     var playingEntryID: UUID?
     /// Called when the play button on a timestamp is tapped; passes elapsed time and entry ID.
@@ -66,7 +66,7 @@ struct TranscriptPaneView: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if showElapsedTime {
                 if let elapsed = line.elapsedTime {
-                    let showPlayButton = isHighlighted && hasRecording
+                    let showPlayButton = isHighlighted && canPlayback
                         && hoveredLineID == line.id && line.sentenceID != nil
                     ZStack {
                         // Normal timestamp text
@@ -88,8 +88,8 @@ struct TranscriptPaneView: View {
                     }
                     .onTapGesture {
                         if let sentenceID = line.sentenceID {
-                            if isHighlighted && hasRecording {
-                                // Already highlighted + recording exists → play/stop
+                            if isHighlighted && canPlayback {
+                                // Already highlighted + playback available → play/stop
                                 onPlayFromTimestamp?(elapsed, sentenceID)
                             } else {
                                 // First tap → highlight

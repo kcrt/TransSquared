@@ -67,6 +67,9 @@ final class SessionViewModel {
     /// URL currently loaded in the playback service (to detect when a reload is needed).
     var loadedPlaybackURL: URL?
 
+    /// Speech synthesis service for reading translated text aloud.
+    let speechSynthesisService = SpeechSynthesisService()
+
     var fontSize: CGFloat = 16
     var isAlwaysOnTop = false
     var errorMessage: String?
@@ -545,6 +548,9 @@ final class SessionViewModel {
 
     /// Plays recorded audio from the given elapsed time.
     func playFromTimestamp(_ elapsedTime: TimeInterval, entryID: UUID) {
+        // Stop any ongoing TTS to avoid overlap
+        speechSynthesisService.stop()
+
         // Find the recording segment that contains this entry's elapsed time
         guard let segment = recordingSegments.last(where: { $0.elapsedTimeOffset <= elapsedTime }) else { return }
 
@@ -569,6 +575,27 @@ final class SessionViewModel {
         } else {
             playbackService?.play(from: audioTime, duration: duration, entryID: entryID)
         }
+    }
+
+    /// Speaks the translated text of the given entry and slot using TTS.
+    func speakTranslation(entryID: UUID, slot: Int) {
+        // Stop any ongoing audio playback to avoid overlap
+        playbackService?.stop()
+
+        // Toggle: stop if already speaking this entry
+        if speechSynthesisService.speakingEntryID == entryID && speechSynthesisService.isSpeaking {
+            speechSynthesisService.stop()
+            return
+        }
+
+        // Look up the translation text for this entry and slot
+        guard let entry = entries.first(where: { $0.id == entryID }),
+              slot < entry.translations.count,
+              let translation = entry.translations[slot],
+              !translation.text.isEmpty else { return }
+
+        let language = targetLanguageIdentifiers[slot]
+        speechSynthesisService.speak(text: translation.text, language: language, entryID: entryID)
     }
 
     /// Cleans up all recording files and playback state.

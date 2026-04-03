@@ -28,7 +28,7 @@ struct ContentView: View {
                     }
                 },
                 highlightedSentenceID: viewModel.highlightedSentenceID,
-                hasRecording: viewModel.hasRecording,
+                canPlayback: viewModel.hasRecording,
                 playingEntryID: viewModel.playbackService?.playingEntryID,
                 onPlayFromTimestamp: { elapsed, entryID in
                     viewModel.playFromTimestamp(elapsed, entryID: entryID)
@@ -139,10 +139,10 @@ struct ContentView: View {
                 }
             },
             highlightedSentenceID: viewModel.highlightedSentenceID,
-            hasRecording: viewModel.hasRecording,
-            playingEntryID: viewModel.playbackService?.playingEntryID,
-            onPlayFromTimestamp: { elapsed, entryID in
-                viewModel.playFromTimestamp(elapsed, entryID: entryID)
+            canPlayback: true,
+            playingEntryID: viewModel.speechSynthesisService.speakingEntryID,
+            onPlayFromTimestamp: { _, entryID in
+                viewModel.speakTranslation(entryID: entryID, slot: capturedSlot)
             }
         )
     }
