@@ -15,15 +15,17 @@ extension SessionViewModel {
 
             let idx = ensureCurrentEntry()
             entries[idx].pendingPartial = text
-            // For file transcription, only set the elapsed time on the first event
-            // so the start time is preserved when multiple chunks accumulate.
-            if isTranscribingFile, let audioOffset {
-                if entries[idx].elapsedTime == nil {
-                    entries[idx].elapsedTime = audioOffset
-                }
+
+            // Set elapsed time from the audio offset on the first event for this entry.
+            // For file transcription, use the raw offset; for live transcription,
+            // add accumulatedElapsedTime so timestamps are cumulative across sessions.
+            if let audioOffset, entries[idx].elapsedTime == nil {
+                entries[idx].elapsedTime = isTranscribingFile ? audioOffset : accumulatedElapsedTime + audioOffset
             }
-            if !isTranscribingFile {
-                entries[idx].duration = duration
+            // Update duration to span from the entry's start to this chunk's end.
+            if let audioOffset, let duration, let startOffset = entries[idx].elapsedTime {
+                let chunkEnd = (isTranscribingFile ? audioOffset : accumulatedElapsedTime + audioOffset) + duration
+                entries[idx].duration = chunkEnd - startOffset
             }
 
             // Request partial translation (debounced)
@@ -44,23 +46,24 @@ extension SessionViewModel {
             // Clear partial and append finalized text to source
             entries[idx].pendingPartial = nil
             entries[idx].source.text += text
-            // For file transcription, use the audio offset from the Speech framework.
-            // Only set on the first finalized chunk so the start time is preserved
+
+            // Use the audio offset from the Speech framework for both file and live
+            // transcription. Only set on the first chunk so the start time is preserved
             // when multiple chunks accumulate before a sentence boundary.
-            // For live transcription, use the wall-clock elapsed time.
-            if isTranscribingFile, let audioOffset {
+            // For live transcription, add accumulatedElapsedTime so timestamps are
+            // cumulative across sessions.
+            if let audioOffset {
                 if entries[idx].elapsedTime == nil {
-                    entries[idx].elapsedTime = audioOffset
+                    entries[idx].elapsedTime = isTranscribingFile ? audioOffset : accumulatedElapsedTime + audioOffset
                 }
                 // Update duration to span from the entry's start to this chunk's end
                 if let startOffset = entries[idx].elapsedTime, let chunkDuration = duration {
-                    entries[idx].duration = (audioOffset + chunkDuration) - startOffset
+                    let chunkEnd = (isTranscribingFile ? audioOffset : accumulatedElapsedTime + audioOffset) + chunkDuration
+                    entries[idx].duration = chunkEnd - startOffset
                 }
             } else if entries[idx].elapsedTime == nil {
+                // Fallback to wall-clock if no audio offset available
                 entries[idx].elapsedTime = currentElapsedTime
-            }
-            if !isTranscribingFile {
-                entries[idx].duration = duration
             }
 
             // Add to sentence buffer and check for boundaries

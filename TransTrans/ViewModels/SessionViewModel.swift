@@ -239,10 +239,10 @@ final class SessionViewModel {
     @discardableResult
     func ensureCurrentEntry() -> Int {
         if let idx = currentEntryIndex { return idx }
-        // For file transcription, leave elapsedTime nil so it gets set from the
-        // audio offset of the first transcription event for this entry.
-        let elapsed: TimeInterval? = isTranscribingFile ? nil : currentElapsedTime
-        entries.append(TranscriptEntry(elapsedTime: elapsed))
+        // Leave elapsedTime nil so it gets set from the audio offset of the
+        // first transcription event for this entry. This ensures accurate
+        // alignment with the recorded audio file for playback.
+        entries.append(TranscriptEntry(elapsedTime: nil))
         return entries.count - 1
     }
 
