@@ -32,9 +32,8 @@ extension SessionViewModel {
         pendingFileTranscriptionURL = nil
 
         // Clear existing transcript data
-        sourceLines.removeAll()
+        entries.removeAll()
         for slot in 0..<translationSlots.count {
-            translationSlots[slot].lines.removeAll()
             translationSlots[slot].queue.removeAll()
         }
         segmentIndex = 0
@@ -58,12 +57,8 @@ extension SessionViewModel {
 
         // Set up translation slots so committed sentences get translated.
         let slotCount = targetCount
-        let previousSlots = translationSlots
         translationSlots = (0..<slotCount).map { i in
             var slot = TranslationSlot()
-            if i < previousSlots.count {
-                slot.lines = previousSlots[i].lines
-            }
             let targetLang = Locale.Language(identifier: targetLanguageIdentifiers[i])
             slot.config = TranslationSession.Configuration(
                 source: sourceLocale.language,

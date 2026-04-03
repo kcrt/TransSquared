@@ -50,17 +50,18 @@ extension SessionViewModel {
     // MARK: - Copy / Export Helpers
 
     func clearHistory() {
-        sourceLines = []
+        entries = []
         for slot in 0..<translationSlots.count {
-            translationSlots[slot].lines = []
+            translationSlots[slot].queue = []
         }
-        uncommittedSourceLineIndices = []
         accumulatedElapsedTime = 0
         sessionStartDate = nil
     }
 
     func copyAllOriginal() -> String {
-        sourceLines.finalizedLines.map(\.text).joined(separator: "\n")
+        entries.filter { !$0.isSeparator && !$0.source.text.isEmpty }
+            .map(\.source.text)
+            .joined(separator: "\n")
     }
 
     func copyAllTranslation() -> String {
@@ -71,28 +72,32 @@ extension SessionViewModel {
                 let langId = slot < targetLanguageIdentifiers.count
                     ? targetLanguageIdentifiers[slot].uppercased() : "?"
                 result.append("[\(langId)]")
-                result.append(contentsOf: translationSlots[slot].lines.finalizedLines.map(\.text))
+                let lines = entries.filter { !$0.isSeparator }
+                    .compactMap { $0.translations[slot] }
+                    .filter { !$0.isPartial }
+                    .map(\.text)
+                result.append(contentsOf: lines)
                 result.append("")
             }
             return result.joined(separator: "\n")
         }
-        return translationSlots.isEmpty ? "" : translationSlots[0].lines.finalizedLines.map(\.text).joined(separator: "\n")
+        return entries.filter { !$0.isSeparator }
+            .compactMap { $0.translations[0] }
+            .filter { !$0.isPartial }
+            .map(\.text)
+            .joined(separator: "\n")
     }
 
     func copyAllInterleaved() -> String {
-        let finalSource = sourceLines.finalizedLines
-        let slotCount = min(targetCount, translationSlots.count)
-        let slotLines = (0..<slotCount).map { translationSlots[$0].lines.finalizedLines }
-        let maxCount = ([finalSource.count] + slotLines.map(\.count)).max() ?? 0
-
         var result: [String] = []
-        for i in 0..<maxCount {
-            if i < finalSource.count {
-                result.append(finalSource[i].text)
-            }
+        let slotCount = min(targetCount, translationSlots.count)
+
+        for entry in entries where !entry.isSeparator && !entry.source.text.isEmpty {
+            result.append(entry.source.text)
+            // Translation for each slot
             for slot in 0..<slotCount {
-                if i < slotLines[slot].count {
-                    result.append(slotLines[slot][i].text)
+                if let trans = entry.translations[slot], !trans.isPartial {
+                    result.append(trans.text)
                 }
             }
             result.append("")

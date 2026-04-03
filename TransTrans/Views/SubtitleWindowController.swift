@@ -112,7 +112,7 @@ final class SubtitleWindowController {
     private func updateContent() {
         guard let viewModel, let hostingView else { return }
         hostingView.rootView = SubtitleOverlayView(
-            lines: viewModel.translationSlots.first?.lines ?? [],
+            lines: viewModel.translationLines(forSlot: 0),
             fontSize: viewModel.fontSize,
             now: Date(),
             onDismiss: { [weak self] in self?.onDismiss?() }
@@ -122,7 +122,7 @@ final class SubtitleWindowController {
     private func makeSubtitleHostingView() -> NSHostingView<SubtitleOverlayView> {
         NSHostingView(
             rootView: SubtitleOverlayView(
-                lines: viewModel?.translationSlots.first?.lines ?? [],
+                lines: viewModel?.translationLines(forSlot: 0) ?? [],
                 fontSize: viewModel?.fontSize ?? 16,
                 now: Date(),
                 onDismiss: { [weak self] in self?.onDismiss?() }

@@ -11,9 +11,26 @@ private let logger = Logger.app("Session")
 final class SessionViewModel {
     // MARK: - Published State
 
-    var sourceLines: [TranscriptLine] = []
+    /// The source of truth for all transcript data. Each entry groups source segments with translations.
+    var entries: [TranscriptEntry] = []
     /// Translation slots — one per target language (always `targetCount` active slots).
+    /// Slots manage queue state; translation results are stored in `entries`.
     var translationSlots: [TranslationSlot] = [TranslationSlot()]
+
+    /// Derived source lines for the UI, computed from entries.
+    var sourceLines: [TranscriptLine] {
+        entries.compactMap { $0.sourceTranscriptLine() }
+    }
+
+    /// Derives translation lines for the given slot from entries.
+    func translationLines(forSlot slot: Int) -> [TranscriptLine] {
+        entries.compactMap { entry in
+            if entry.isSeparator {
+                return TranscriptLine(id: entry.id, text: "", isPartial: false, isSeparator: true)
+            }
+            return entry.translationTranscriptLine(forSlot: slot)
+        }
+    }
     var isSessionActive = false
     var fontSize: CGFloat = 16
     var isAlwaysOnTop = false
@@ -131,7 +148,7 @@ final class SessionViewModel {
 
     /// Whether there is any transcript content (source or translation) to export or clear.
     var hasTranscriptContent: Bool {
-        !sourceLines.isEmpty || translationSlots.first?.lines.isEmpty == false
+        !entries.isEmpty
     }
 
     var sourceLocale: Locale {
@@ -152,8 +169,6 @@ final class SessionViewModel {
     var sentenceBoundaryTimer: Task<Void, Never>?
     var sentenceBoundaryGeneration: UInt64 = 0
     var pendingSentenceBuffer = ""
-    /// Indices of finalized source lines accumulated since the last sentence commit.
-    var uncommittedSourceLineIndices: [Int] = []
     var sessionStartDate: Date?
     /// Total elapsed time accumulated from previous start/stop cycles.
     var accumulatedElapsedTime: TimeInterval = 0
@@ -169,6 +184,28 @@ final class SessionViewModel {
             currentSegment = 0
         }
         return accumulatedElapsedTime + currentSegment
+    }
+
+    /// Index of the current uncommitted, non-separator entry (the one being built).
+    var currentEntryIndex: Int? {
+        guard let last = entries.indices.last else { return nil }
+        let entry = entries[last]
+        if entry.isSeparator || entry.isCommitted { return nil }
+        return last
+    }
+
+    /// Ensures a current (uncommitted) entry exists, creating one if needed.
+    /// Returns the index of the current entry.
+    @discardableResult
+    func ensureCurrentEntry() -> Int {
+        if let idx = currentEntryIndex { return idx }
+        entries.append(TranscriptEntry(elapsedTime: currentElapsedTime))
+        return entries.count - 1
+    }
+
+    /// Finds the entry index for a given entry ID.
+    func entryIndex(for entryID: UUID) -> Int? {
+        entries.firstIndex(where: { $0.id == entryID })
     }
 
     static let partialTranslationDebounce: Duration = .milliseconds(300)
@@ -270,35 +307,33 @@ final class SessionViewModel {
 
         errorMessage = nil
 
-        // Remove any leftover partial lines from the previous session
-        sourceLines.removeAll { $0.isPartial }
-        for slot in 0..<translationSlots.count {
-            translationSlots[slot].lines.removeAll { $0.isPartial }
+        // Remove any leftover partial state from the previous session
+        if let idx = currentEntryIndex {
+            entries[idx].pendingPartial = nil
+            for slot in 0..<entries[idx].translations.count {
+                if entries[idx].translations[slot]?.isPartial == true {
+                    entries[idx].translations[slot] = nil
+                }
+            }
+            // Remove the entry entirely if it has no content
+            if entries[idx].source.text.isEmpty && entries[idx].translations.allSatisfy({ $0 == nil }) {
+                entries.remove(at: idx)
+            }
         }
 
         // Insert a separator if there is previous history
-        if !sourceLines.isEmpty {
-            let separator = TranscriptLine(text: "", isPartial: false, isSeparator: true)
-            sourceLines.append(separator)
-            for slot in 0..<translationSlots.count {
-                translationSlots[slot].lines.append(separator)
-            }
+        if !entries.isEmpty {
+            entries.append(TranscriptEntry(isSeparator: true))
         }
 
         pendingSentenceBuffer = ""
-        uncommittedSourceLineIndices = []
         segmentIndex = 0
         sessionStartDate = Date()
 
-        // Initialize translation slots based on display mode
+        // Initialize translation slots
         let slotCount = targetCount
-        let previousSlots = translationSlots
         translationSlots = (0..<slotCount).map { i in
             var slot = TranslationSlot()
-            // Preserve existing lines (history) from previous slots if available
-            if i < previousSlots.count {
-                slot.lines = previousSlots[i].lines
-            }
             let targetLang = Locale.Language(identifier: targetLanguageIdentifiers[i])
             slot.config = TranslationSession.Configuration(
                 source: sourceLocale.language,
@@ -375,7 +410,7 @@ final class SessionViewModel {
         }
         audioLevelRingBuffer = Array(repeating: 0, count: Self.audioLevelSampleCount)
         audioLevelWriteIndex = 0
-        logger.info("Session stopped (source lines: \(self.sourceLines.count), target lines: \(self.translationSlots[0].lines.count))")
+        logger.info("Session stopped (entries: \(self.entries.count))")
     }
 
     func toggleSession() {

@@ -9,66 +9,55 @@ private let logger = Logger.app("Editing")
 extension SessionViewModel {
 
     /// Called when the user edits a source (transcription) line.
-    /// Updates the line text and re-translates the corresponding sentence in all slots.
+    /// Updates the source text and re-translates the corresponding sentence in all slots.
     func editSourceLine(id: UUID, newText: String) {
-        guard let lineIndex = sourceLines.firstIndex(where: { $0.id == id }) else { return }
-        let oldText = sourceLines[lineIndex].text
+        // Find the entry matching this source ID
+        guard let entryIdx = findSourceEntry(id: id) else { return }
+        let oldText = entries[entryIdx].source.text
         guard newText != oldText else { return }
 
-        sourceLines[lineIndex].text = newText
+        entries[entryIdx].source.text = newText
         logger.info("Source line edited: \"\(oldText)\" → \"\(newText)\"")
 
-        guard let sentenceID = sourceLines[lineIndex].sentenceID else {
-            // No sentenceID means this line hasn't been committed yet; no re-translation possible.
+        guard entries[entryIdx].isCommitted else {
+            // Not committed yet; no re-translation possible.
             return
         }
 
-        // Reconstruct the full sentence from all source lines with this sentenceID
-        let sentenceLines = sourceLines.filter { $0.sentenceID == sentenceID }
-        let reconstructedSentence = sentenceLines.map(\.text).joined()
-
+        let entryID = entries[entryIdx].id
         for slot in 0..<targetCount {
-            retranslateForSlot(slot, sentenceID: sentenceID, sentence: reconstructedSentence)
+            retranslateForSlot(slot, entryIndex: entryIdx, entryID: entryID, sentence: newText)
         }
     }
 
     /// Called when the user edits a translation line.
     /// Simply updates the text in-place; no re-translation is triggered.
     func editTranslationLine(slot: Int, id: UUID, newText: String) {
-        guard slot < translationSlots.count else { return }
-        guard let lineIndex = translationSlots[slot].lines.firstIndex(where: { $0.id == id }) else { return }
-        let oldText = translationSlots[slot].lines[lineIndex].text
-        guard newText != oldText else { return }
+        guard let entryIdx = findTranslationEntry(slot: slot, translationID: id) else { return }
+        guard let oldText = entries[entryIdx].translations[slot]?.text, newText != oldText else { return }
 
-        translationSlots[slot].lines[lineIndex].text = newText
+        entries[entryIdx].translations[slot]?.text = newText
         logger.info("Translation line edited (slot \(slot)): \"\(oldText)\" → \"\(newText)\"")
     }
 
-    /// Re-translates a sentence in a specific slot by finding the translation line
-    /// with the matching sentenceID and enqueuing a new translation.
-    private func retranslateForSlot(_ slot: Int, sentenceID: UUID, sentence: String) {
+    /// Re-translates a sentence in a specific slot by replacing the translation with a placeholder
+    /// and enqueuing a new translation request.
+    private func retranslateForSlot(_ slot: Int, entryIndex entryIdx: Int, entryID: UUID, sentence: String) {
         guard slot < translationSlots.count else { return }
 
-        guard let targetIndex = translationSlots[slot].lines.firstIndex(where: { $0.sentenceID == sentenceID }) else {
-            logger.debug("No translation line found for sentenceID in slot \(slot)")
-            return
-        }
+        let elapsed = entries[entryIdx].elapsedTime
 
-        let elapsed = translationSlots[slot].lines[targetIndex].elapsedTime
+        // Replace translation with placeholder
+        entries[entryIdx].translations[slot] = TransString(text: "…", isPartial: true)
 
-        // Replace line with placeholder
-        translationSlots[slot].lines[targetIndex] = TranscriptLine(
-            text: "…", isPartial: true, elapsedTime: elapsed, sentenceID: sentenceID
-        )
-
-        // Remove any existing queue items for this targetIndex to avoid duplicates
-        translationSlots[slot].queue.removeAll { $0.targetIndex == targetIndex }
+        // Remove any existing queue items for this entry to avoid duplicates
+        translationSlots[slot].queue.removeAll { $0.entryID == entryID }
 
         // Enqueue the re-translation
         translationSlots[slot].queue.append(
             TranslationQueueItem(
-                sentence: sentence, targetIndex: targetIndex,
-                isPartial: false, elapsedTime: elapsed, sentenceID: sentenceID
+                sentence: sentence, entryID: entryID,
+                isPartial: false, elapsedTime: elapsed
             )
         )
 
@@ -83,6 +72,18 @@ extension SessionViewModel {
             translationSlots[slot].config?.invalidate()
         }
 
-        logger.debug("Re-translation queued for slot \(slot), targetIndex: \(targetIndex)")
+        logger.debug("Re-translation queued for slot \(slot), entryID: \(entryID)")
+    }
+
+    // MARK: - Entry Lookup Helpers
+
+    /// Finds the entry index whose source has the given ID.
+    private func findSourceEntry(id: UUID) -> Int? {
+        entries.firstIndex(where: { $0.source.id == id })
+    }
+
+    /// Finds the entry index containing a translation with the given ID in the specified slot.
+    private func findTranslationEntry(slot: Int, translationID: UUID) -> Int? {
+        entries.firstIndex(where: { $0.translations[slot]?.id == translationID })
     }
 }

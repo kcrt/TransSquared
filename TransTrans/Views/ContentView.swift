@@ -111,7 +111,7 @@ struct ContentView: View {
             ? Locale.current.localizedString(forIdentifier: viewModel.targetLanguageIdentifiers[slot])
                 ?? viewModel.targetLanguageIdentifiers[slot].uppercased()
             : "?"
-        let lines = slot < viewModel.translationSlots.count ? viewModel.translationSlots[slot].lines : []
+        let lines = viewModel.translationLines(forSlot: slot)
         let placeholder: String? = viewModel.isSessionActive ? nil : (
             viewModel.targetCount == 1
                 ? String(localized: "Translation will appear here")

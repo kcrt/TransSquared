@@ -20,11 +20,10 @@ extension SessionViewModel {
         logger.info("Translation session available for slot \(slot), queued: \(self.translationSlots[slot].queue.count)")
 
         // Process queued translations using the session provided by the closure.
-        // Do NOT store the session — it is only valid within this closure scope.
         // Re-check bounds after each await since translationSlots may be rebuilt.
         while slot < translationSlots.count && !translationSlots[slot].queue.isEmpty {
             let item = translationSlots[slot].queue.removeFirst()
-            await translateSentence(item.sentence, using: session, slot: slot, targetIndex: item.targetIndex, isPartial: item.isPartial)
+            await translateSentence(item.sentence, using: session, slot: slot, entryID: item.entryID, isPartial: item.isPartial)
         }
     }
 
@@ -34,8 +33,8 @@ extension SessionViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        // Use the elapsed time from the current partial source line
-        let sourceElapsedTime = sourceLines.last?.elapsedTime
+        // Use the elapsed time from the current entry
+        let sourceElapsedTime = entries.last?.elapsedTime
 
         for slot in 0..<targetCount {
             requestPartialTranslationForSlot(slot, text: trimmed, elapsedTime: sourceElapsedTime)
@@ -46,10 +45,10 @@ extension SessionViewModel {
         guard slot < translationSlots.count else { return }
         translationSlots[slot].pendingPartialText = text
         translationSlots[slot].pendingPartialElapsedTime = elapsedTime
+
         translationSlots[slot].partialDebounceGeneration &+= 1
 
         // If a debounce task is already running, it will detect the new generation and re-wait.
-        // This avoids creating and cancelling a new Task on every partial event (~10+/sec).
         guard translationSlots[slot].partialTranslationTimer == nil else { return }
 
         let capturedSlot = slot
@@ -68,104 +67,132 @@ extension SessionViewModel {
             }
             guard !Task.isCancelled, capturedSlot < translationSlots.count,
                   let text = translationSlots[capturedSlot].pendingPartialText else { return }
-            let elapsed = translationSlots[capturedSlot].pendingPartialElapsedTime
             translationSlots[capturedSlot].pendingPartialText = nil
             translationSlots[capturedSlot].pendingPartialElapsedTime = nil
 
-            let idx = translationSlots[capturedSlot].enqueueTranslation(sentence: text, isPartial: true, elapsedTime: elapsed)
-            logger.debug("Queuing partial translation slot \(capturedSlot) (targetIndex: \(idx)): \"\(text, privacy: .private)\"")
+            enqueuePartialTranslation(slot: capturedSlot, text: text)
         }
+    }
+
+    /// Creates or reuses a partial translation placeholder in the current entry and enqueues it.
+    private func enqueuePartialTranslation(slot: Int, text: String) {
+        let idx = ensureCurrentEntry()
+        let entryID = entries[idx].id
+
+        // Create or reuse partial translation placeholder
+        if entries[idx].translations[slot] == nil {
+            entries[idx].translations[slot] = TransString(text: "…", isPartial: true)
+        }
+
+        translationSlots[slot].partialEntryID = entryID
+        translationSlots[slot].queue.append(
+            TranslationQueueItem(sentence: text, entryID: entryID, isPartial: true, elapsedTime: entries[idx].elapsedTime)
+        )
+        if !translationSlots[slot].isProcessing {
+            translationSlots[slot].config?.invalidate()
+        }
+        logger.debug("Queuing partial translation slot \(slot): \"\(text, privacy: .private)\"")
     }
 
     func commitSentence(_ sentence: String) {
         guard !sentence.isEmpty else { return }
 
         segmentIndex += 1
-        let sid = UUID()
 
-        // Use the elapsed time from the first source line in this sentence group
-        // so the translation timestamp matches the transcription timestamp.
-        let sourceElapsedTime = uncommittedSourceLineIndices.first.flatMap { idx in
-            idx < sourceLines.count ? sourceLines[idx].elapsedTime : nil
+        // Get the current entry (which accumulated source segments for this sentence)
+        guard let idx = currentEntryIndex else {
+            logger.warning("commitSentence called but no current entry exists")
+            return
         }
 
-        // Tag all accumulated source lines with this sentenceID
-        for idx in uncommittedSourceLineIndices {
-            if idx < sourceLines.count {
-                sourceLines[idx].sentenceID = sid
-            }
-        }
-        uncommittedSourceLineIndices = []
+        entries[idx].isCommitted = true
 
         logger.debug("Committing sentence #\(self.segmentIndex): \"\(sentence, privacy: .private)\"")
 
         for slot in 0..<targetCount {
-            commitSentenceForSlot(slot, sentence: sentence, sentenceID: sid, elapsedTime: sourceElapsedTime)
+            commitSentenceForSlot(slot, entryIndex: idx, sentence: sentence)
         }
     }
 
-    private func commitSentenceForSlot(_ slot: Int, sentence: String, sentenceID: UUID, elapsedTime: TimeInterval?) {
+    private func commitSentenceForSlot(_ slot: Int, entryIndex idx: Int, sentence: String) {
         guard slot < translationSlots.count else { return }
         translationSlots[slot].partialTranslationTimer?.cancel()
         translationSlots[slot].partialTranslationTimer = nil
         translationSlots[slot].pendingPartialText = nil
         translationSlots[slot].pendingPartialElapsedTime = nil
 
-        let idx = translationSlots[slot].enqueueTranslation(sentence: sentence, isPartial: false, resetPartialIndex: true, elapsedTime: elapsedTime, sentenceID: sentenceID)
-        logger.debug("Queuing for translation (slot: \(slot), targetIndex: \(idx))")
+        let entryID = entries[idx].id
+        let elapsed = entries[idx].elapsedTime
+
+        // Create or reuse translation placeholder (may already exist from partial)
+        let transString: TransString
+        if let existing = entries[idx].translations[slot], existing.isPartial {
+            // Reuse existing partial's ID for UI stability
+            transString = TransString(id: existing.id, text: "…", isPartial: true)
+        } else {
+            transString = TransString(text: "…", isPartial: true)
+        }
+        entries[idx].translations[slot] = transString
+
+        translationSlots[slot].partialEntryID = nil
+        translationSlots[slot].queue.append(
+            TranslationQueueItem(sentence: sentence, entryID: entryID, isPartial: false, elapsedTime: elapsed)
+        )
+        if !translationSlots[slot].isProcessing {
+            translationSlots[slot].config?.invalidate()
+        }
+        logger.debug("Queuing for translation (slot: \(slot), entryID: \(entryID))")
     }
 
-    private func translateSentence(_ sentence: String, using session: TranslationSession, slot: Int, targetIndex: Int, isPartial: Bool) async {
+    private func translateSentence(_ sentence: String, using session: TranslationSession, slot: Int, entryID: UUID, isPartial: Bool) async {
         logger.debug("Translating slot \(slot) (\(isPartial ? "partial" : "final")): \"\(sentence, privacy: .private)\"")
         do {
             let response = try await session.translate(sentence)
             logger.debug("Slot \(slot) translation result (\(isPartial ? "partial" : "final")): \"\(response.targetText, privacy: .private)\"")
-            // Re-check slot bounds after await since translationSlots may have been rebuilt
+
             guard slot < translationSlots.count,
-                  targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count else { return }
-            // For partial translations, only update if the line is still partial
-            // (a final translation may have already replaced it)
-            let existingLine = translationSlots[slot].lines[targetIndex]
-            let elapsed = existingLine.elapsedTime
-            let sid = existingLine.sentenceID
+                  let entryIdx = entryIndex(for: entryID),
+                  slot < entries[entryIdx].translations.count else { return }
+
+            let existing = entries[entryIdx].translations[slot]
+
             if isPartial {
-                if existingLine.isPartial {
-                    translationSlots[slot].lines[targetIndex] = TranscriptLine(text: response.targetText, isPartial: true, elapsedTime: elapsed, sentenceID: sid)
+                // Only update if the translation is still partial
+                if existing?.isPartial == true {
+                    entries[entryIdx].translations[slot] = TransString(
+                        id: existing!.id, text: response.targetText, isPartial: true
+                    )
                 }
             } else {
-                translationSlots[slot].lines[targetIndex] = TranscriptLine(text: response.targetText, isPartial: false, finalizedAt: Date(), elapsedTime: elapsed, sentenceID: sid)
+                entries[entryIdx].translations[slot] = TransString(
+                    id: existing?.id ?? UUID(), text: response.targetText, isPartial: false, finalizedAt: Date()
+                )
             }
         } catch is CancellationError {
-            // Task was cancelled (e.g. session stopped) — not a real failure.
             logger.info("Slot \(slot) translation cancelled")
         } catch where Self.isTranslationSessionCancellation(error) {
-            // The translation session was invalidated/replaced while this request was in flight.
-            // Re-enqueue the item so the next session can pick it up.
             let nsError = error as NSError
             logger.info("Slot \(slot) translation session cancelled (domain: \(nsError.domain), code: \(nsError.code)), re-enqueueing")
             if slot < translationSlots.count {
-                let existingLine = targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count
-                    ? translationSlots[slot].lines[targetIndex] : nil
+                let elapsed = entryIndex(for: entryID).flatMap { entries[$0].elapsedTime }
                 translationSlots[slot].queue.insert(
-                    TranslationQueueItem(sentence: sentence, targetIndex: targetIndex, isPartial: isPartial, elapsedTime: existingLine?.elapsedTime, sentenceID: existingLine?.sentenceID), at: 0
+                    TranslationQueueItem(sentence: sentence, entryID: entryID, isPartial: isPartial, elapsedTime: elapsed), at: 0
                 )
             }
         } catch {
             logger.error("Slot \(slot) translation failed: \(error.localizedDescription)")
-            // Only show error for final translations; silently ignore partial failures
             if !isPartial {
-                if slot < translationSlots.count,
-                   targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count {
-                    let existingLine = translationSlots[slot].lines[targetIndex]
-                    translationSlots[slot].lines[targetIndex] = TranscriptLine(text: "[Translation failed]", isPartial: false, finalizedAt: Date(), elapsedTime: existingLine.elapsedTime, sentenceID: existingLine.sentenceID)
+                if let entryIdx = entryIndex(for: entryID), slot < entries[entryIdx].translations.count {
+                    let existing = entries[entryIdx].translations[slot]
+                    entries[entryIdx].translations[slot] = TransString(
+                        id: existing?.id ?? UUID(), text: "[Translation failed]", isPartial: false, finalizedAt: Date()
+                    )
                 }
             }
         }
     }
 
     /// Determines whether an error represents a Translation framework session cancellation.
-    /// These errors occur when `TranslationSession.Configuration.invalidate()` is called
-    /// while a translation request is in flight.
     private static func isTranslationSessionCancellation(_ error: Error) -> Bool {
         let nsError = error as NSError
         return nsError.domain.contains("Translation")

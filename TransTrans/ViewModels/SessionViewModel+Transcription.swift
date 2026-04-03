@@ -12,13 +12,10 @@ extension SessionViewModel {
         case .partial(let rawText, let duration):
             let text = applyAutoReplacements(rawText)
             logger.debug("Event: partial \"\(rawText, privacy: .private)\" → \"\(text, privacy: .private)\"")
-            // Remove old partial line and add new one, preserving original elapsed time
-            if let lastIndex = sourceLines.indices.last, sourceLines[lastIndex].isPartial {
-                let originalElapsed = sourceLines[lastIndex].elapsedTime
-                sourceLines[lastIndex] = TranscriptLine(text: text, isPartial: true, elapsedTime: originalElapsed, duration: duration)
-            } else {
-                sourceLines.append(TranscriptLine(text: text, isPartial: true, elapsedTime: currentElapsedTime, duration: duration))
-            }
+
+            let idx = ensureCurrentEntry()
+            entries[idx].pendingPartial = text
+            entries[idx].duration = duration
 
             // Request partial translation (debounced)
             requestPartialTranslation(for: pendingSentenceBuffer + text)
@@ -26,20 +23,23 @@ extension SessionViewModel {
         case .finalized(let rawText, let duration):
             let text = applyAutoReplacements(rawText)
             logger.debug("Event: final \"\(rawText, privacy: .private)\" → \"\(text, privacy: .private)\"")
+
             // Cancel any pending partial translation timers
             for slot in 0..<translationSlots.count {
                 translationSlots[slot].partialTranslationTimer?.cancel()
                 translationSlots[slot].partialTranslationTimer = nil
             }
 
-            // Remove partial line if present
-            if let lastIndex = sourceLines.indices.last, sourceLines[lastIndex].isPartial {
-                sourceLines.removeLast()
-            }
+            let idx = ensureCurrentEntry()
 
-            // Append finalized text
-            sourceLines.append(TranscriptLine(text: text, isPartial: false, elapsedTime: currentElapsedTime, duration: duration))
-            uncommittedSourceLineIndices.append(sourceLines.count - 1)
+            // Clear partial and append finalized text to source
+            entries[idx].pendingPartial = nil
+            entries[idx].source.text += text
+            // Set elapsed time if not already set
+            if entries[idx].elapsedTime == nil {
+                entries[idx].elapsedTime = currentElapsedTime
+            }
+            entries[idx].duration = duration
 
             // Add to sentence buffer and check for boundaries
             pendingSentenceBuffer += text

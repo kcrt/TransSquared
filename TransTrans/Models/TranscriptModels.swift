@@ -31,24 +31,146 @@ enum PermissionIssue: Identifiable {
     }
 }
 
+// MARK: - TransString
+
+/// A text string with partial/finalized state, used as the building block for source segments and translations.
+struct TransString: Identifiable, Sendable {
+    let id: UUID
+    var text: String
+    var isPartial: Bool
+    /// The time when this string was finalized (non-partial). Used for subtitle expiration.
+    var finalizedAt: Date?
+
+    init(id: UUID = UUID(), text: String, isPartial: Bool, finalizedAt: Date? = nil) {
+        self.id = id
+        self.text = text
+        self.isPartial = isPartial
+        self.finalizedAt = finalizedAt
+    }
+}
+
+// MARK: - TranscriptEntry
+
+/// A single utterance unit grouping source text with its translations and shared metadata.
+/// Each entry corresponds to one committed sentence (or an in-progress uncommitted one).
+struct TranscriptEntry: Identifiable, Sendable {
+    let id: UUID
+    /// Accumulated finalized source text for this utterance.
+    var source: TransString
+    /// Current partial recognition text (in-progress, not yet finalized). Displayed but temporary.
+    var pendingPartial: String?
+    /// Translations indexed by slot (0..<maxTargetCount). `nil` means not yet translated.
+    var translations: [TransString?]
+    /// Cumulative elapsed time (in seconds) from the first session start when this entry was created.
+    var elapsedTime: TimeInterval?
+    /// The duration of spoken audio for this entry, in seconds.
+    var duration: TimeInterval?
+    /// True for visual separator entries inserted between sessions.
+    var isSeparator: Bool
+    /// True after sentence boundary detection commits this entry for translation.
+    var isCommitted: Bool
+
+    /// Maximum number of target language slots.
+    static let maxTranslationSlots = 3
+
+    init(
+        id: UUID = UUID(),
+        source: TransString = TransString(text: "", isPartial: false),
+        pendingPartial: String? = nil,
+        translations: [TransString?]? = nil,
+        elapsedTime: TimeInterval? = nil,
+        duration: TimeInterval? = nil,
+        isSeparator: Bool = false,
+        isCommitted: Bool = false
+    ) {
+        self.id = id
+        self.source = source
+        self.pendingPartial = pendingPartial
+        self.translations = translations ?? Array(repeating: nil, count: Self.maxTranslationSlots)
+        self.elapsedTime = elapsedTime
+        self.duration = duration
+        self.isSeparator = isSeparator
+        self.isCommitted = isCommitted
+    }
+
+    /// Derives a `TranscriptLine` for the source pane, or `nil` if the entry has no displayable content.
+    func sourceTranscriptLine() -> TranscriptLine? {
+        if isSeparator {
+            return TranscriptLine(id: id, text: "", isPartial: false, isSeparator: true)
+        }
+        let displayText: String
+        let isDisplayPartial: Bool
+        if let partial = pendingPartial {
+            displayText = source.text.isEmpty ? partial : source.text + partial
+            isDisplayPartial = true
+        } else if !source.text.isEmpty {
+            displayText = source.text
+            isDisplayPartial = false
+        } else {
+            return nil
+        }
+        return TranscriptLine(
+            id: source.id,
+            text: displayText,
+            isPartial: isDisplayPartial,
+            elapsedTime: elapsedTime,
+            duration: duration,
+            sentenceID: isCommitted ? id : nil
+        )
+    }
+
+    /// Derives a `TranscriptLine` for the translation pane of the given slot, or `nil` if no translation exists.
+    func translationTranscriptLine(forSlot slot: Int) -> TranscriptLine? {
+        guard slot < translations.count, let trans = translations[slot] else { return nil }
+        return TranscriptLine(
+            id: trans.id,
+            text: trans.text,
+            isPartial: trans.isPartial,
+            finalizedAt: trans.finalizedAt,
+            elapsedTime: elapsedTime,
+            sentenceID: id
+        )
+    }
+}
+
+// MARK: - TranscriptLine (UI display type)
+
 /// A single line of transcribed/translated text displayed in the UI.
+/// Derived from `TranscriptEntry` for view consumption.
 struct TranscriptLine: Identifiable, Sendable {
-    let id = UUID()
+    let id: UUID
     var text: String
     var isPartial: Bool
     /// The time when this line was finalized (non-partial). Used for subtitle expiration.
     var finalizedAt: Date?
     /// True for visual separator lines inserted between sessions.
-    var isSeparator: Bool = false
+    var isSeparator: Bool
     /// Cumulative elapsed time (in seconds) from the first session start when this line was created.
-    var elapsedTime: TimeInterval? = nil
+    var elapsedTime: TimeInterval?
     /// The duration of spoken audio for this line, in seconds.
-    /// Only available when the transcriber provides audio time-range attributes.
-    var duration: TimeInterval? = nil
-    /// Groups source lines and their corresponding translation line(s).
-    /// All source lines accumulated into the same committed sentence share
-    /// the same sentenceID as the resulting translation line.
-    var sentenceID: UUID? = nil
+    var duration: TimeInterval?
+    /// The entry ID (sentence ID) this line belongs to.
+    var sentenceID: UUID?
+
+    init(
+        id: UUID = UUID(),
+        text: String,
+        isPartial: Bool,
+        finalizedAt: Date? = nil,
+        isSeparator: Bool = false,
+        elapsedTime: TimeInterval? = nil,
+        duration: TimeInterval? = nil,
+        sentenceID: UUID? = nil
+    ) {
+        self.id = id
+        self.text = text
+        self.isPartial = isPartial
+        self.finalizedAt = finalizedAt
+        self.isSeparator = isSeparator
+        self.elapsedTime = elapsedTime
+        self.duration = duration
+        self.sentenceID = sentenceID
+    }
 }
 
 extension Array where Element == TranscriptLine {
