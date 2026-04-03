@@ -18,6 +18,12 @@ struct SaveTranscriptMenuItems: View {
         Button("Both (Interleaved)") {
             viewModel.saveTranscript(contentType: .both)
         }
+        if viewModel.hasRecording {
+            Divider()
+            Button("Audio Recording (.m4a)") {
+                viewModel.exportAudioRecording()
+            }
+        }
     }
 }
 

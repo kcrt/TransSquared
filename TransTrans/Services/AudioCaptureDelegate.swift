@@ -20,6 +20,14 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
     private var accumulationBuffer: AVAudioPCMBuffer?
     private var accumulatedFrames: AVAudioFrameCount = 0
 
+    // MARK: - Recording support
+    /// Optional writer input for recording raw audio to m4a. Set before capture starts.
+    var recordingInput: AVAssetWriterInput?
+    /// The asset writer owning `recordingInput`. Used to call `startSession(atSourceTime:)` on the first buffer.
+    var recordingWriter: AVAssetWriter?
+    /// Tracks whether `startSession(atSourceTime:)` has been called on the writer.
+    private var recordingSessionStarted = false
+
     init(targetFormat: AVAudioFormat, continuation: AsyncStream<AnalyzerInput>.Continuation, levelContinuation: AsyncStream<Float>.Continuation) {
         self.targetFormat = targetFormat
         self.continuation = continuation
@@ -47,6 +55,18 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
         guard frameCount > 0 else {
             logger.debug("Empty sample buffer received")
             return
+        }
+
+        // Forward raw CMSampleBuffer to the recorder (if active).
+        // This runs on the serial captureQueue, so AVAssetWriterInput.append is safe.
+        if let recordingInput, let recordingWriter {
+            if !recordingSessionStarted {
+                recordingWriter.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
+                recordingSessionStarted = true
+            }
+            if recordingInput.isReadyForMoreMediaData {
+                recordingInput.append(sampleBuffer)
+            }
         }
 
         if bufferCount == 1 {

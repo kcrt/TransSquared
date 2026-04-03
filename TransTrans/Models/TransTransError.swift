@@ -10,6 +10,9 @@ enum TransTransError: Error, LocalizedError {
     case alreadyRunning
     case audioFormatUnavailable
 
+    // Recording errors
+    case recordingFailed
+
     var errorDescription: String? {
         switch self {
         case .alreadyCapturing:
@@ -20,6 +23,8 @@ enum TransTransError: Error, LocalizedError {
             return String(localized: "Transcription is already running.")
         case .audioFormatUnavailable:
             return String(localized: "No compatible audio format available. Assets may need to be installed.")
+        case .recordingFailed:
+            return String(localized: "Failed to start audio recording.")
         }
     }
 }

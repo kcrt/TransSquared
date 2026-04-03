@@ -32,6 +32,39 @@ final class SessionViewModel {
         }
     }
     var isSessionActive = false
+
+    // MARK: - Session Mode & Recording State
+
+    /// Whether the session transcribes only or also records audio (persisted via UserDefaults).
+    var sessionMode: SessionMode = {
+        if let raw = UserDefaults.standard.string(forKey: "sessionMode"),
+           let mode = SessionMode(rawValue: raw) {
+            return mode
+        }
+        return .transcribeOnly
+    }() {
+        didSet { UserDefaults.standard.set(sessionMode.rawValue, forKey: "sessionMode") }
+    }
+
+    /// The active recording service (non-nil only while recording in `.recordAndTranscribe` mode).
+    var recordingService: AudioRecordingService?
+    /// URL of the current/most-recent recording file. Available for playback after recording stops.
+    var currentRecordingURL: URL?
+    /// The cumulative elapsed time offset when recording started, used to map entry timestamps to audio time.
+    var recordingStartElapsedOffset: TimeInterval = 0
+    /// Whether a recording file exists for the current session (enables playback UI).
+    var hasRecording: Bool { currentRecordingURL != nil }
+
+    /// Pending mode switch awaiting user confirmation (non-nil when confirmation alert is shown).
+    var pendingModeSwitch: SessionMode?
+    /// Whether the mode-switch confirmation alert is presented.
+    var showModeSwitchConfirmation = false
+
+    // MARK: - Playback State
+
+    /// Playback service for replaying recorded audio at specific timestamps.
+    var playbackService: AudioPlaybackService?
+
     var fontSize: CGFloat = 16
     var isAlwaysOnTop = false
     var errorMessage: String?
@@ -353,8 +386,22 @@ final class SessionViewModel {
 
         transcriptionTask = Task {
             do {
+                // Start recording if in record-and-transcribe mode
+                var writerInput: AVAssetWriterInput?
+                var writer: AVAssetWriter?
+                if sessionMode == .recordAndTranscribe {
+                    let recorder = AudioRecordingService()
+                    let url = try recorder.startRecording()
+                    self.recordingService = recorder
+                    self.currentRecordingURL = url
+                    self.recordingStartElapsedOffset = accumulatedElapsedTime
+                    writerInput = recorder.audioWriterInput
+                    writer = recorder.assetWriter
+                    logger.info("Audio recording started: \(url.lastPathComponent)")
+                }
+
                 logger.info("Starting transcription manager...")
-                let streams = try await transcriptionManager.start(locale: sourceLocale, audioDevice: selectedMicrophone, contextualStrings: currentContextualStrings)
+                let streams = try await transcriptionManager.start(locale: sourceLocale, audioDevice: selectedMicrophone, contextualStrings: currentContextualStrings, recordingInput: writerInput, recordingWriter: writer)
 
                 // Start consuming audio levels for waveform display
                 if let levelStream = streams.audioLevels {
@@ -410,6 +457,13 @@ final class SessionViewModel {
         // Await full teardown so the microphone is released before any restart
         await transcriptionManager.stop()
 
+        // Finalize recording (keep URL for playback)
+        if let recorder = recordingService {
+            _ = await recorder.stopRecording()
+            recordingService = nil
+            logger.info("Audio recording finalized")
+        }
+
         isSessionActive = false
         for slot in 0..<translationSlots.count {
             translationSlots[slot].reset()
@@ -427,6 +481,60 @@ final class SessionViewModel {
                 await startSession()
             }
         }
+    }
+
+    // MARK: - Session Mode
+
+    /// Changes the session mode, potentially showing a confirmation alert if a recording exists.
+    func setSessionMode(_ mode: SessionMode) {
+        guard mode != sessionMode else { return }
+        guard !isSessionActive else { return }
+        if currentRecordingURL != nil {
+            pendingModeSwitch = mode
+            showModeSwitchConfirmation = true
+            return
+        }
+        sessionMode = mode
+    }
+
+    /// Confirms the pending mode switch, cleaning up any existing recording.
+    func confirmModeSwitch() {
+        guard let mode = pendingModeSwitch else { return }
+        cleanupRecording()
+        sessionMode = mode
+        pendingModeSwitch = nil
+    }
+
+    // MARK: - Playback
+
+    /// Plays recorded audio from the given elapsed time.
+    func playFromTimestamp(_ elapsedTime: TimeInterval, entryID: UUID) {
+        guard let url = currentRecordingURL else { return }
+
+        if playbackService == nil {
+            playbackService = AudioPlaybackService()
+            playbackService?.loadAudio(url: url)
+        }
+
+        // Convert entry elapsed time to audio file position
+        let audioTime = elapsedTime - recordingStartElapsedOffset
+        guard audioTime >= 0 else { return }
+
+        // Toggle: stop if already playing this entry, otherwise play
+        if playbackService?.playingEntryID == entryID && playbackService?.isPlaying == true {
+            playbackService?.stop()
+        } else {
+            playbackService?.play(from: audioTime, entryID: entryID)
+        }
+    }
+
+    /// Cleans up recording file and playback state.
+    func cleanupRecording() {
+        playbackService?.cleanup()
+        playbackService = nil
+        recordingService?.cleanup()
+        recordingService = nil
+        currentRecordingURL = nil
     }
 
     // MARK: - Display Mode

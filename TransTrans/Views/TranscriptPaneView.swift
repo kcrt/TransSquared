@@ -13,10 +13,17 @@ struct TranscriptPaneView: View {
     var onTimestampTapped: ((UUID) -> Void)?
     /// The sentenceID currently highlighted across all panes.
     var highlightedSentenceID: UUID?
+    /// Whether a recording exists (enables play button on timestamp hover).
+    var hasRecording: Bool = false
+    /// The entry ID currently being played back (for stop icon display).
+    var playingEntryID: UUID?
+    /// Called when the play button on a timestamp is tapped; passes elapsed time and entry ID.
+    var onPlayFromTimestamp: ((TimeInterval, UUID) -> Void)?
 
     @State private var editingLineID: UUID?
     @State private var editText: String = ""
     @FocusState private var isEditing: Bool
+    @State private var hoveredLineID: UUID?
 
     var body: some View {
         if lines.isEmpty, let placeholder {
@@ -59,15 +66,37 @@ struct TranscriptPaneView: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if showElapsedTime {
                 if let elapsed = line.elapsedTime {
-                    Text(formatElapsedTime(elapsed))
-                        .font(.system(size: fontSize * 0.75, design: .monospaced))
-                        .foregroundStyle(isHighlighted ? .secondary : .tertiary)
-                        .frame(minWidth: 40, alignment: .trailing)
-                        .onTapGesture {
-                            if let sentenceID = line.sentenceID {
+                    let showPlayButton = isHighlighted && hasRecording
+                        && hoveredLineID == line.id && line.sentenceID != nil
+                    ZStack {
+                        // Normal timestamp text
+                        Text(formatElapsedTime(elapsed))
+                            .font(.system(size: fontSize * 0.75, design: .monospaced))
+                            .foregroundStyle(isHighlighted ? .secondary : .tertiary)
+                            .opacity(showPlayButton ? 0 : 1)
+
+                        // Play/stop button on hover (only when highlighted and recording exists)
+                        if showPlayButton, let sentenceID = line.sentenceID {
+                            Image(systemName: playingEntryID == sentenceID ? "stop.fill" : "play.fill")
+                                .font(.system(size: fontSize * 0.65))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                    }
+                    .frame(minWidth: 40, alignment: .trailing)
+                    .onHover { isHovered in
+                        hoveredLineID = isHovered ? line.id : nil
+                    }
+                    .onTapGesture {
+                        if let sentenceID = line.sentenceID {
+                            if isHighlighted && hasRecording {
+                                // Already highlighted + recording exists → play/stop
+                                onPlayFromTimestamp?(elapsed, sentenceID)
+                            } else {
+                                // First tap → highlight
                                 onTimestampTapped?(sentenceID)
                             }
                         }
+                    }
                 } else {
                     // Reserve column space for alignment when no timestamp is available.
                     Text("00:00")

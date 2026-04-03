@@ -56,6 +56,35 @@ extension SessionViewModel {
         }
         accumulatedElapsedTime = 0
         sessionStartDate = nil
+        cleanupRecording()
+    }
+
+    /// Presents a save panel for exporting the recorded audio file.
+    func exportAudioRecording() {
+        guard let sourceURL = currentRecordingURL else { return }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mpeg4Audio]
+        panel.nameFieldStringValue = defaultAudioFileName()
+        panel.begin { [sourceURL] response in
+            guard response == .OK, let destURL = panel.url else { return }
+            do {
+                if FileManager.default.fileExists(atPath: destURL.path) {
+                    try FileManager.default.removeItem(at: destURL)
+                }
+                try FileManager.default.copyItem(at: sourceURL, to: destURL)
+                logger.info("Audio recording exported to \(destURL.path)")
+            } catch {
+                logger.error("Failed to export audio: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func defaultAudioFileName() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timestamp = formatter.string(from: Date())
+        return "TransTrans_\(timestamp)_recording.m4a"
     }
 
     func copyAllOriginal() -> String {

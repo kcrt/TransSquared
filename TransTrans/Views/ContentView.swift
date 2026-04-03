@@ -27,7 +27,12 @@ struct ContentView: View {
                             viewModel.highlightedSentenceID == sentenceID ? nil : sentenceID
                     }
                 },
-                highlightedSentenceID: viewModel.highlightedSentenceID
+                highlightedSentenceID: viewModel.highlightedSentenceID,
+                hasRecording: viewModel.hasRecording,
+                playingEntryID: viewModel.playbackService?.playingEntryID,
+                onPlayFromTimestamp: { elapsed, entryID in
+                    viewModel.playFromTimestamp(elapsed, entryID: entryID)
+                }
             )
             Divider()
 
@@ -133,7 +138,12 @@ struct ContentView: View {
                         viewModel.highlightedSentenceID == sentenceID ? nil : sentenceID
                 }
             },
-            highlightedSentenceID: viewModel.highlightedSentenceID
+            highlightedSentenceID: viewModel.highlightedSentenceID,
+            hasRecording: viewModel.hasRecording,
+            playingEntryID: viewModel.playbackService?.playingEntryID,
+            onPlayFromTimestamp: { elapsed, entryID in
+                viewModel.playFromTimestamp(elapsed, entryID: entryID)
+            }
         )
     }
 
@@ -234,6 +244,21 @@ private struct SheetsAndAlerts: ViewModifier {
                     logger.error("Failed to export transcript: \(error.localizedDescription)")
                     viewModel.errorMessage = "Failed to save: \(error.localizedDescription)"
                 }
+            }
+            .alert(
+                String(localized: "Recording Will Be Deleted",
+                       comment: "Title of confirmation alert when switching session mode with existing recording"),
+                isPresented: $viewModel.showModeSwitchConfirmation
+            ) {
+                Button(String(localized: "Cancel", comment: "Cancel button"), role: .cancel) {
+                    viewModel.pendingModeSwitch = nil
+                }
+                Button(String(localized: "OK", comment: "OK button to confirm mode switch")) {
+                    viewModel.confirmModeSwitch()
+                }
+            } message: {
+                Text("Switching modes will delete the current audio recording.",
+                     comment: "Message explaining that the recording will be lost when switching session mode")
             }
             .alert("Error", isPresented: showErrorBinding) {
                 Button("OK") { viewModel.errorMessage = nil }

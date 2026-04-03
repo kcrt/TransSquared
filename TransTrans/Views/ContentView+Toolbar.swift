@@ -10,18 +10,44 @@ extension ContentView {
 
     @ToolbarContentBuilder
     var toolbarContent: some ToolbarContent {
-        // Group 1: Waveform + Rec/Stop + Mic (recording input)
+        // Group 1: Waveform (standalone) + Rec/Stop split button + Mic
         ToolbarItemGroup {
-            Button {
-                viewModel.toggleSession()
-            } label: {
-                HStack(spacing: 6) {
-                    AudioWaveformView(levels: viewModel.audioLevels, isActive: viewModel.isSessionActive)
-                        .frame(width: 60, height: 20)
-                    Image(systemName: viewModel.isSessionActive ? "stop.fill" : "circle.fill")
-                        .foregroundStyle(viewModel.isSessionActive ? .red : .pink)
+            // RMS Monitor — always visible, independent of the session button
+            AudioWaveformView(levels: viewModel.audioLevels, isActive: viewModel.isSessionActive)
+                .frame(width: 60, height: 20)
+
+            // Session toggle (split button): click to start/stop, dropdown to pick mode
+            Menu {
+                Button {
+                    viewModel.setSessionMode(.transcribeOnly)
+                } label: {
+                    Label {
+                        Text("音声認識", comment: "Transcribe-only session mode")
+                    } icon: {
+                        if viewModel.sessionMode == .transcribeOnly {
+                            Image(systemName: "checkmark")
+                        }
+                    }
                 }
+                Button {
+                    viewModel.setSessionMode(.recordAndTranscribe)
+                } label: {
+                    Label {
+                        Text("録音しながら音声認識", comment: "Record + transcribe session mode")
+                    } icon: {
+                        if viewModel.sessionMode == .recordAndTranscribe {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: sessionButtonIcon)
+                    .foregroundStyle(.red)
+                    .symbolEffect(.pulse, options: .repeating, isActive: shouldBlinkRecordIcon)
+            } primaryAction: {
+                viewModel.toggleSession()
             }
+            .menuIndicator(.visible)
             .help(viewModel.isSessionActive ? "Stop (⌘R)" : "Start (⌘R)")
 
             Menu {
@@ -208,6 +234,24 @@ extension ContentView {
         }
         .disabled(viewModel.isSessionActive)
         .help("Target Language \(slot + 1)")
+    }
+
+    // MARK: - Session Button Helpers
+
+    private var sessionButtonIcon: String {
+        if viewModel.isSessionActive {
+            return "stop.fill"
+        }
+        switch viewModel.sessionMode {
+        case .transcribeOnly:
+            return "ear"
+        case .recordAndTranscribe:
+            return "record.circle"
+        }
+    }
+
+    private var shouldBlinkRecordIcon: Bool {
+        viewModel.isSessionActive && viewModel.sessionMode == .recordAndTranscribe
     }
 
     // MARK: - Toolbar Helpers
