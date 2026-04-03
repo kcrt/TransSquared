@@ -18,6 +18,7 @@ extension ContentView {
             } label: {
                 AudioWaveformView(levels: viewModel.audioLevels, isActive: viewModel.isSessionActive)
                     .frame(width: 60, height: 20)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .popover(isPresented: Bindable(viewModel).showAudioPopover) {
