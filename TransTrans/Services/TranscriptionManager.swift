@@ -130,10 +130,10 @@ actor TranscriptionManager {
                     let text = String(result.text.characters)
                     let duration = extractAudioDuration(from: result.text)
                     if result.isFinal {
-                        logger.info("Final result #\(resultCount): \"\(text)\" (duration: \(duration.map { String(format: "%.2fs", $0) } ?? "nil"))")
+                        logger.debug("Final result #\(resultCount): \"\(text, privacy: .private)\" (duration: \(duration.map { String(format: "%.2fs", $0) } ?? "nil"))")
                         capturedContinuation.yield(.finalized(text, duration: duration))
                     } else {
-                        logger.debug("Partial result #\(resultCount): \"\(text)\"")
+                        logger.debug("Partial result #\(resultCount): \"\(text, privacy: .private)\"")
                         capturedContinuation.yield(.partial(text, duration: duration))
                     }
                 }

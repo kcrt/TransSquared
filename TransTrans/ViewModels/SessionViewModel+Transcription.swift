@@ -11,7 +11,7 @@ extension SessionViewModel {
         switch event {
         case .partial(let rawText, let duration):
             let text = applyAutoReplacements(rawText)
-            logger.debug("Event: partial \"\(rawText)\" → \"\(text)\"")
+            logger.debug("Event: partial \"\(rawText, privacy: .private)\" → \"\(text, privacy: .private)\"")
             // Remove old partial line and add new one, preserving original elapsed time
             if let lastIndex = sourceLines.indices.last, sourceLines[lastIndex].isPartial {
                 let originalElapsed = sourceLines[lastIndex].elapsedTime
@@ -25,7 +25,7 @@ extension SessionViewModel {
 
         case .finalized(let rawText, let duration):
             let text = applyAutoReplacements(rawText)
-            logger.info("Event: final \"\(rawText)\" → \"\(text)\"")
+            logger.debug("Event: final \"\(rawText, privacy: .private)\" → \"\(text, privacy: .private)\"")
             // Cancel any pending partial translation timers
             for slot in 0..<translationSlots.count {
                 translationSlots[slot].partialTranslationTimer?.cancel()

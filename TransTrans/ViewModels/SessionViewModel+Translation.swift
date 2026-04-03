@@ -73,7 +73,7 @@ extension SessionViewModel {
             translationSlots[capturedSlot].pendingPartialElapsedTime = nil
 
             let idx = translationSlots[capturedSlot].enqueueTranslation(sentence: text, isPartial: true, elapsedTime: elapsed)
-            logger.debug("Queuing partial translation slot \(capturedSlot) (targetIndex: \(idx)): \"\(text)\"")
+            logger.debug("Queuing partial translation slot \(capturedSlot) (targetIndex: \(idx)): \"\(text, privacy: .private)\"")
         }
     }
 
@@ -97,7 +97,7 @@ extension SessionViewModel {
         }
         uncommittedSourceLineIndices = []
 
-        logger.info("Committing sentence #\(self.segmentIndex): \"\(sentence)\"")
+        logger.debug("Committing sentence #\(self.segmentIndex): \"\(sentence, privacy: .private)\"")
 
         for slot in 0..<targetCount {
             commitSentenceForSlot(slot, sentence: sentence, sentenceID: sid, elapsedTime: sourceElapsedTime)
@@ -116,10 +116,10 @@ extension SessionViewModel {
     }
 
     private func translateSentence(_ sentence: String, using session: TranslationSession, slot: Int, targetIndex: Int, isPartial: Bool) async {
-        logger.debug("Translating slot \(slot) (\(isPartial ? "partial" : "final")): \"\(sentence)\"")
+        logger.debug("Translating slot \(slot) (\(isPartial ? "partial" : "final")): \"\(sentence, privacy: .private)\"")
         do {
             let response = try await session.translate(sentence)
-            logger.info("Slot \(slot) translation result (\(isPartial ? "partial" : "final")): \"\(response.targetText)\"")
+            logger.debug("Slot \(slot) translation result (\(isPartial ? "partial" : "final")): \"\(response.targetText, privacy: .private)\"")
             // Re-check slot bounds after await since translationSlots may have been rebuilt
             guard slot < translationSlots.count,
                   targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count else { return }
