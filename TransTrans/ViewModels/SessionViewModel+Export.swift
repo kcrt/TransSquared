@@ -35,16 +35,13 @@ extension SessionViewModel {
     }
 
     private func defaultFileName(for contentType: SaveContentType) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let timestamp = formatter.string(from: Date())
         let suffix: String
         switch contentType {
         case .original: suffix = "original"
         case .translation: suffix = "translation"
         case .both: suffix = "interleaved"
         }
-        return "TransTrans_\(timestamp)_\(suffix).txt"
+        return "TransTrans_\(Self.fileTimestamp())_\(suffix).txt"
     }
 
     // MARK: - Copy / Export Helpers
@@ -81,10 +78,7 @@ extension SessionViewModel {
     }
 
     private func defaultAudioFileName() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let timestamp = formatter.string(from: Date())
-        return "TransTrans_\(timestamp)_recording.m4a"
+        "TransTrans_\(Self.fileTimestamp())_recording.m4a"
     }
 
     func copyAllOriginal() -> String {
@@ -157,13 +151,7 @@ extension SessionViewModel {
 
     /// Presents a save panel for exporting a subtitle file.
     func exportSubtitle(format: SubtitleFormat, contentType: SaveContentType) {
-        let content: String
-        switch format {
-        case .srt:
-            content = generateSRT(contentType: contentType)
-        case .vtt:
-            content = generateVTT(contentType: contentType)
-        }
+        let content = generateSubtitleContent(format: format, contentType: contentType)
 
         guard !content.isEmpty else { return }
 
@@ -182,48 +170,39 @@ extension SessionViewModel {
     }
 
     private func defaultSubtitleFileName(format: SubtitleFormat, contentType: SaveContentType) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let timestamp = formatter.string(from: Date())
         let suffix: String
         switch contentType {
         case .original: suffix = "original"
         case .translation: suffix = "translation"
         case .both: suffix = "bilingual"
         }
-        return "TransTrans_\(timestamp)_\(suffix).\(format.fileExtension)"
+        return "TransTrans_\(Self.fileTimestamp())_\(suffix).\(format.fileExtension)"
     }
 
-    // MARK: - SRT Generation
+    // MARK: - Subtitle Generation
 
-    private func generateSRT(contentType: SaveContentType) -> String {
+    private func generateSubtitleContent(format: SubtitleFormat, contentType: SaveContentType) -> String {
         let cues = subtitleCues(contentType: contentType)
         guard !cues.isEmpty else { return "" }
 
-        var result: [String] = []
+        let msSeparator: String = format == .srt ? "," : "."
+        var result: [String] = format == .vtt ? ["WEBVTT", ""] : []
         for (index, cue) in cues.enumerated() {
             result.append("\(index + 1)")
-            result.append("\(formatSRTTimestamp(cue.startTime)) --> \(formatSRTTimestamp(cue.endTime))")
+            result.append("\(formatSubtitleTimestamp(cue.startTime, millisecondSeparator: msSeparator)) --> \(formatSubtitleTimestamp(cue.endTime, millisecondSeparator: msSeparator))")
             result.append(cue.text)
             result.append("")
         }
         return result.joined(separator: "\n")
     }
 
-    // MARK: - VTT Generation
+    // MARK: - Filename Helpers
 
-    private func generateVTT(contentType: SaveContentType) -> String {
-        let cues = subtitleCues(contentType: contentType)
-        guard !cues.isEmpty else { return "" }
-
-        var result: [String] = ["WEBVTT", ""]
-        for (index, cue) in cues.enumerated() {
-            result.append("\(index + 1)")
-            result.append("\(formatVTTTimestamp(cue.startTime)) --> \(formatVTTTimestamp(cue.endTime))")
-            result.append(cue.text)
-            result.append("")
-        }
-        return result.joined(separator: "\n")
+    /// Generates a `yyyyMMdd_HHmmss` timestamp for export filenames.
+    private static func fileTimestamp() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        return formatter.string(from: Date())
     }
 
     // MARK: - Subtitle Helpers
@@ -270,25 +249,15 @@ extension SessionViewModel {
         }
     }
 
-    /// Formats a time interval as SRT timestamp: `HH:MM:SS,mmm`
-    private func formatSRTTimestamp(_ seconds: TimeInterval) -> String {
+    /// Formats a time interval as a subtitle timestamp with the given millisecond separator.
+    /// SRT uses `,` and VTT uses `.` as the separator.
+    private func formatSubtitleTimestamp(_ seconds: TimeInterval, millisecondSeparator: String) -> String {
         let totalMs = Int(seconds * 1000)
         let ms = totalMs % 1000
         let totalSec = totalMs / 1000
         let s = totalSec % 60
         let m = (totalSec / 60) % 60
         let h = totalSec / 3600
-        return String(format: "%02d:%02d:%02d,%03d", h, m, s, ms)
-    }
-
-    /// Formats a time interval as VTT timestamp: `HH:MM:SS.mmm`
-    private func formatVTTTimestamp(_ seconds: TimeInterval) -> String {
-        let totalMs = Int(seconds * 1000)
-        let ms = totalMs % 1000
-        let totalSec = totalMs / 1000
-        let s = totalSec % 60
-        let m = (totalSec / 60) % 60
-        let h = totalSec / 3600
-        return String(format: "%02d:%02d:%02d.%03d", h, m, s, ms)
+        return String(format: "%02d:%02d:%02d\(millisecondSeparator)%03d", h, m, s, ms)
     }
 }

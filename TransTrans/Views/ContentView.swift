@@ -176,11 +176,6 @@ struct ContentView: View {
         .disabled(viewModel.isSessionActive)
     }
 
-    private func copyToClipboard(_ string: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(string, forType: .string)
-    }
-
     /// The main application window (excludes subtitle overlay panels).
     private var mainWindow: NSWindow? {
         NSApplication.shared.windows.first { !($0 is NSPanel) }

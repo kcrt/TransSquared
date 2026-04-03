@@ -29,6 +29,15 @@ extension SessionViewModel {
 
     // MARK: - Translation Queue
 
+    /// Appends a translation item to the slot's queue and triggers the translation session if idle.
+    func enqueueTranslation(slot: Int, item: TranslationQueueItem) {
+        guard slot < translationSlots.count else { return }
+        translationSlots[slot].queue.append(item)
+        if !translationSlots[slot].isProcessing {
+            translationSlots[slot].config?.invalidate()
+        }
+    }
+
     func requestPartialTranslation(for text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -85,12 +94,9 @@ extension SessionViewModel {
         }
 
         translationSlots[slot].partialEntryID = entryID
-        translationSlots[slot].queue.append(
-            TranslationQueueItem(sentence: text, entryID: entryID, isPartial: true, elapsedTime: entries[idx].elapsedTime)
-        )
-        if !translationSlots[slot].isProcessing {
-            translationSlots[slot].config?.invalidate()
-        }
+        enqueueTranslation(slot: slot, item: TranslationQueueItem(
+            sentence: text, entryID: entryID, isPartial: true, elapsedTime: entries[idx].elapsedTime
+        ))
         logger.debug("Queuing partial translation slot \(slot): \"\(text, privacy: .private)\"")
     }
 
@@ -146,12 +152,9 @@ extension SessionViewModel {
         entries[idx].translations[slot] = transString
 
         translationSlots[slot].partialEntryID = nil
-        translationSlots[slot].queue.append(
-            TranslationQueueItem(sentence: sentence, entryID: entryID, isPartial: false, elapsedTime: elapsed)
-        )
-        if !translationSlots[slot].isProcessing {
-            translationSlots[slot].config?.invalidate()
-        }
+        enqueueTranslation(slot: slot, item: TranslationQueueItem(
+            sentence: sentence, entryID: entryID, isPartial: false, elapsedTime: elapsed
+        ))
         logger.debug("Queuing for translation (slot: \(slot), entryID: \(entryID))")
     }
 

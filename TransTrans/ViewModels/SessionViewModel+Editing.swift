@@ -53,14 +53,6 @@ extension SessionViewModel {
         // Remove any existing queue items for this entry to avoid duplicates
         translationSlots[slot].queue.removeAll { $0.entryID == entryID }
 
-        // Enqueue the re-translation
-        translationSlots[slot].queue.append(
-            TranslationQueueItem(
-                sentence: sentence, entryID: entryID,
-                isPartial: false, elapsedTime: elapsed
-            )
-        )
-
         // Ensure translation session is available
         if translationSlots[slot].config == nil {
             let targetLang = Locale.Language(identifier: targetLanguageIdentifiers[slot])
@@ -68,9 +60,13 @@ extension SessionViewModel {
                 source: sourceLocale.language,
                 target: targetLang
             )
-        } else if !translationSlots[slot].isProcessing {
-            translationSlots[slot].config?.invalidate()
         }
+
+        // Enqueue the re-translation
+        enqueueTranslation(slot: slot, item: TranslationQueueItem(
+            sentence: sentence, entryID: entryID,
+            isPartial: false, elapsedTime: elapsed
+        ))
 
         logger.debug("Re-translation queued for slot \(slot), entryID: \(entryID)")
     }

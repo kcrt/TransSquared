@@ -17,14 +17,12 @@ extension SessionViewModel {
             entries[idx].pendingPartial = text
 
             // Set elapsed time from the audio offset on the first event for this entry.
-            // For file transcription, use the raw offset; for live transcription,
-            // add accumulatedElapsedTime so timestamps are cumulative across sessions.
             if let audioOffset, entries[idx].elapsedTime == nil {
-                entries[idx].elapsedTime = isTranscribingFile ? audioOffset : accumulatedElapsedTime + audioOffset
+                entries[idx].elapsedTime = adjustedElapsedTime(audioOffset: audioOffset)
             }
             // Update duration to span from the entry's start to this chunk's end.
             if let audioOffset, let duration, let startOffset = entries[idx].elapsedTime {
-                let chunkEnd = (isTranscribingFile ? audioOffset : accumulatedElapsedTime + audioOffset) + duration
+                let chunkEnd = adjustedElapsedTime(audioOffset: audioOffset) + duration
                 entries[idx].duration = chunkEnd - startOffset
             }
 
@@ -50,15 +48,13 @@ extension SessionViewModel {
             // Use the audio offset from the Speech framework for both file and live
             // transcription. Only set on the first chunk so the start time is preserved
             // when multiple chunks accumulate before a sentence boundary.
-            // For live transcription, add accumulatedElapsedTime so timestamps are
-            // cumulative across sessions.
             if let audioOffset {
                 if entries[idx].elapsedTime == nil {
-                    entries[idx].elapsedTime = isTranscribingFile ? audioOffset : accumulatedElapsedTime + audioOffset
+                    entries[idx].elapsedTime = adjustedElapsedTime(audioOffset: audioOffset)
                 }
                 // Update duration to span from the entry's start to this chunk's end
                 if let startOffset = entries[idx].elapsedTime, let chunkDuration = duration {
-                    let chunkEnd = (isTranscribingFile ? audioOffset : accumulatedElapsedTime + audioOffset) + chunkDuration
+                    let chunkEnd = adjustedElapsedTime(audioOffset: audioOffset) + chunkDuration
                     entries[idx].duration = chunkEnd - startOffset
                 }
             } else if entries[idx].elapsedTime == nil {

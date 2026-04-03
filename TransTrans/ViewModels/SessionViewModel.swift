@@ -200,6 +200,13 @@ final class SessionViewModel {
         Locale(identifier: sourceLocaleIdentifier)
     }
 
+    /// Whether the subtitle mode button should be disabled.
+    var isSubtitleButtonDisabled: Bool {
+        if displayMode == .subtitle { return false }
+        if !isSessionActive { return true }
+        return targetCount > 1
+    }
+
     /// The currently selected microphone device, or nil for system default.
     var selectedMicrophone: AVCaptureDevice? {
         if selectedMicrophoneID.isEmpty { return nil }
@@ -218,6 +225,13 @@ final class SessionViewModel {
     /// Total elapsed time accumulated from previous start/stop cycles.
     var accumulatedElapsedTime: TimeInterval = 0
     var segmentIndex = 0
+
+    /// Converts a raw audio offset to a cumulative elapsed time.
+    /// For file transcription the offset is used directly; for live transcription
+    /// the accumulated time from previous sessions is added.
+    func adjustedElapsedTime(audioOffset: TimeInterval) -> TimeInterval {
+        isTranscribingFile ? audioOffset : accumulatedElapsedTime + audioOffset
+    }
 
     /// Cumulative elapsed time from the first session start to now,
     /// accounting for time accumulated across previous start/stop cycles.
@@ -254,6 +268,19 @@ final class SessionViewModel {
     /// Finds the entry index for a given entry ID.
     func entryIndex(for entryID: UUID) -> Int? {
         entries.firstIndex(where: { $0.id == entryID })
+    }
+
+    /// Creates fresh translation slots for the current target language configuration.
+    func makeTranslationSlots() -> [TranslationSlot] {
+        (0..<targetCount).map { i in
+            var slot = TranslationSlot()
+            let targetLang = Locale.Language(identifier: targetLanguageIdentifiers[i])
+            slot.config = TranslationSession.Configuration(
+                source: sourceLocale.language,
+                target: targetLang
+            )
+            return slot
+        }
     }
 
     static let partialTranslationDebounce: Duration = .milliseconds(300)
@@ -382,17 +409,7 @@ final class SessionViewModel {
         sessionStartDate = Date()
 
         // Initialize translation slots
-        let slotCount = targetCount
-        translationSlots = (0..<slotCount).map { i in
-            var slot = TranslationSlot()
-            let targetLang = Locale.Language(identifier: targetLanguageIdentifiers[i])
-            slot.config = TranslationSession.Configuration(
-                source: sourceLocale.language,
-                target: targetLang
-            )
-            logger.debug("Translation config created for slot \(i): \(self.sourceLocale.language.minimalIdentifier) → \(targetLang.minimalIdentifier)")
-            return slot
-        }
+        translationSlots = makeTranslationSlots()
 
         isSessionActive = true
 

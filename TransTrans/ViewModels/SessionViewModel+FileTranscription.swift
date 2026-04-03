@@ -62,16 +62,7 @@ extension SessionViewModel {
         recordingSegments = []
 
         // Set up translation slots so committed sentences get translated.
-        let slotCount = targetCount
-        translationSlots = (0..<slotCount).map { i in
-            var slot = TranslationSlot()
-            let targetLang = Locale.Language(identifier: targetLanguageIdentifiers[i])
-            slot.config = TranslationSession.Configuration(
-                source: sourceLocale.language,
-                target: targetLang
-            )
-            return slot
-        }
+        translationSlots = makeTranslationSlots()
 
         let transcriber = AudioFileTranscriber()
         audioFileTranscriber = transcriber

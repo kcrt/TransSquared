@@ -121,7 +121,7 @@ struct AppMenuCommands: Commands {
 
                 Toggle(subtitleModeLabel, isOn: subtitleModeBinding)
                     .keyboardShortcut("d")
-                    .disabled(subtitleButtonDisabled)
+                    .disabled(viewModel?.isSubtitleButtonDisabled ?? true)
             }
         }
 
@@ -294,16 +294,4 @@ struct AppMenuCommands: Commands {
         return vm.isSessionActive || vm.isTranscribingFile
     }
 
-    private var subtitleButtonDisabled: Bool {
-        guard let vm = viewModel else { return true }
-        if vm.displayMode == .subtitle { return false }
-        if !vm.isSessionActive { return true }
-        return vm.targetCount > 1
-    }
-
-    private func copyToClipboard(_ string: String?) {
-        guard let string else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(string, forType: .string)
-    }
 }

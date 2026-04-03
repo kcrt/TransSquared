@@ -156,6 +156,15 @@ struct FileTranscriptionProgressView: View {
     }
 }
 
+// MARK: - Pasteboard Helper
+
+/// Copies a string to the system clipboard.
+func copyToClipboard(_ string: String?) {
+    guard let string else { return }
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(string, forType: .string)
+}
+
 // MARK: - Audio Waveform Visualization
 
 struct AudioWaveformView: View {

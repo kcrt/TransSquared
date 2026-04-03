@@ -96,7 +96,7 @@ extension ContentView {
                     systemImage: viewModel.displayMode == .subtitle ? "captions.bubble.fill" : "captions.bubble"
                 )
             }
-            .disabled(subtitleButtonDisabled)
+            .disabled(viewModel.isSubtitleButtonDisabled)
             .help(subtitleButtonHelp)
 
             Button {
@@ -273,12 +273,6 @@ extension ContentView {
             return String(localized: "Microphone: \(device.localizedName)")
         }
         return String(localized: "Microphone")
-    }
-
-    var subtitleButtonDisabled: Bool {
-        if viewModel.displayMode == .subtitle { return false }
-        if !viewModel.isSessionActive { return true }
-        return viewModel.targetCount > 1
     }
 
     var subtitleButtonHelp: String {
