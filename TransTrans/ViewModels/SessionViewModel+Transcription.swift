@@ -15,10 +15,15 @@ extension SessionViewModel {
 
             let idx = ensureCurrentEntry()
             entries[idx].pendingPartial = text
-            entries[idx].duration = duration
-            // For file transcription, use the audio offset as the elapsed time
+            // For file transcription, only set the elapsed time on the first event
+            // so the start time is preserved when multiple chunks accumulate.
             if isTranscribingFile, let audioOffset {
-                entries[idx].elapsedTime = audioOffset
+                if entries[idx].elapsedTime == nil {
+                    entries[idx].elapsedTime = audioOffset
+                }
+            }
+            if !isTranscribingFile {
+                entries[idx].duration = duration
             }
 
             // Request partial translation (debounced)
@@ -40,13 +45,23 @@ extension SessionViewModel {
             entries[idx].pendingPartial = nil
             entries[idx].source.text += text
             // For file transcription, use the audio offset from the Speech framework.
+            // Only set on the first finalized chunk so the start time is preserved
+            // when multiple chunks accumulate before a sentence boundary.
             // For live transcription, use the wall-clock elapsed time.
             if isTranscribingFile, let audioOffset {
-                entries[idx].elapsedTime = audioOffset
+                if entries[idx].elapsedTime == nil {
+                    entries[idx].elapsedTime = audioOffset
+                }
+                // Update duration to span from the entry's start to this chunk's end
+                if let startOffset = entries[idx].elapsedTime, let chunkDuration = duration {
+                    entries[idx].duration = (audioOffset + chunkDuration) - startOffset
+                }
             } else if entries[idx].elapsedTime == nil {
                 entries[idx].elapsedTime = currentElapsedTime
             }
-            entries[idx].duration = duration
+            if !isTranscribingFile {
+                entries[idx].duration = duration
+            }
 
             // Add to sentence buffer and check for boundaries
             pendingSentenceBuffer += text
