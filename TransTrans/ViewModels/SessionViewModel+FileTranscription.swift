@@ -33,6 +33,7 @@ extension SessionViewModel {
 
         // Clear existing transcript data
         entries.removeAll()
+        cleanupTranslationSlotState()
         for slot in 0..<translationSlots.count {
             translationSlots[slot].queue.removeAll()
         }

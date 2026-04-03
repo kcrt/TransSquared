@@ -37,6 +37,7 @@ extension ContentView {
             } label: {
                 Image(nsImage: Self.redSymbol(named: sessionButtonIcon))
                     .symbolEffect(.pulse, options: .repeating, isActive: shouldBlinkRecordIcon)
+                    .accessibilityLabel(viewModel.isSessionActive ? "Stop" : "Start")
             } primaryAction: {
                 viewModel.toggleSession()
             }

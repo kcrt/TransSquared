@@ -174,7 +174,18 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
         let framesToCopy = min(buffer.frameLength, Self.accumulationFrameCount - accumulatedFrames)
         let channelCount = Int(targetFormat.channelCount)
 
-        for ch in 0..<channelCount {
+        // Validate channel counts match actual buffer data to prevent out-of-bounds access
+        let srcChannels = Int(buffer.format.channelCount)
+        let dstChannels = Int(accumBuf.format.channelCount)
+        let safeChannelCount = min(channelCount, srcChannels, dstChannels)
+
+        guard framesToCopy > 0, safeChannelCount > 0,
+              Int(accumulatedFrames) + Int(framesToCopy) <= Int(accumBuf.frameCapacity) else {
+            continuation.yield(AnalyzerInput(buffer: buffer))
+            return
+        }
+
+        for ch in 0..<safeChannelCount {
             let src = srcFloat[ch]
             let dst = dstFloat[ch].advanced(by: Int(accumulatedFrames))
             memcpy(dst, src, Int(framesToCopy) * MemoryLayout<Float>.size)
@@ -198,8 +209,11 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
             let leftover = buffer.frameLength - framesToCopy
             if leftover > 0 {
                 guard let newAccumBuf = accumulationBuffer,
-                      let newDstFloat = newAccumBuf.floatChannelData else { return }
-                for ch in 0..<channelCount {
+                      let newDstFloat = newAccumBuf.floatChannelData,
+                      Int(leftover) <= Int(newAccumBuf.frameCapacity) else { return }
+                let newDstChannels = Int(newAccumBuf.format.channelCount)
+                let safeLeftoverChannels = min(safeChannelCount, newDstChannels)
+                for ch in 0..<safeLeftoverChannels {
                     let src = srcFloat[ch].advanced(by: Int(framesToCopy))
                     memcpy(newDstFloat[ch], src, Int(leftover) * MemoryLayout<Float>.size)
                 }

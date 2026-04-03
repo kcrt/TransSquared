@@ -137,15 +137,23 @@ final class SessionViewModel {
     /// Number of audio level samples kept for waveform visualization.
     static let audioLevelSampleCount = 20
     /// Ordered audio level samples for waveform visualization (oldest → newest, 0.0–1.0).
-    /// Backed by a ring buffer for O(1) writes; the ordered array is only constructed on read.
-    var audioLevels: [Float] {
-        let n = Self.audioLevelSampleCount
-        let start = audioLevelWriteIndex % n
-        if start == 0 { return audioLevelRingBuffer }
-        return Array(audioLevelRingBuffer[start...]) + Array(audioLevelRingBuffer[..<start])
-    }
+    /// Cached to avoid allocating two new arrays on every SwiftUI redraw.
+    private(set) var audioLevels = Array(repeating: Float(0), count: audioLevelSampleCount)
     private var audioLevelRingBuffer = Array(repeating: Float(0), count: audioLevelSampleCount)
     private var audioLevelWriteIndex = 0
+
+    /// Writes a new level into the ring buffer and rebuilds the cached ordered array.
+    func appendAudioLevel(_ level: Float) {
+        audioLevelRingBuffer[audioLevelWriteIndex % Self.audioLevelSampleCount] = level
+        audioLevelWriteIndex += 1
+        let n = Self.audioLevelSampleCount
+        let start = audioLevelWriteIndex % n
+        if start == 0 {
+            audioLevels = audioLevelRingBuffer
+        } else {
+            audioLevels = Array(audioLevelRingBuffer[start...]) + Array(audioLevelRingBuffer[..<start])
+        }
+    }
 
     // Language selection stored as String identifiers for reliable Picker binding.
     // Persisted via UserDefaults so the last-used languages are restored on relaunch.
@@ -438,8 +446,7 @@ final class SessionViewModel {
                     audioLevelTask = Task {
                         var silenceStart: ContinuousClock.Instant?
                         for await level in levelStream {
-                            audioLevelRingBuffer[audioLevelWriteIndex % Self.audioLevelSampleCount] = level
-                            audioLevelWriteIndex += 1
+                            appendAudioLevel(level)
 
                             // Silence-based sentence boundary detection:
                             // When actual audio silence persists for sentenceBoundarySeconds,
@@ -517,13 +524,8 @@ final class SessionViewModel {
         // Clean up timers and partial state, but keep queue and config alive
         // so that pending/in-flight translations can still complete.
         // startSession() replaces translationSlots entirely, so no stale state leaks.
-        for slot in 0..<translationSlots.count {
-            translationSlots[slot].partialTranslationTimer?.cancel()
-            translationSlots[slot].partialTranslationTimer = nil
-            translationSlots[slot].pendingPartialText = nil
-            translationSlots[slot].pendingPartialElapsedTime = nil
-            translationSlots[slot].partialEntryID = nil
-        }
+        cleanupTranslationSlotState()
+        audioLevels = Array(repeating: 0, count: Self.audioLevelSampleCount)
         audioLevelRingBuffer = Array(repeating: 0, count: Self.audioLevelSampleCount)
         audioLevelWriteIndex = 0
         logger.info("Session stopped (entries: \(self.entries.count))")
@@ -613,6 +615,18 @@ final class SessionViewModel {
 
         let language = targetLanguageIdentifiers[slot]
         speechSynthesisService.speak(text: translation.text, language: language, entryID: entryID)
+    }
+
+    /// Cancels partial translation timers and clears transient slot state.
+    /// Call this when stopping a session or discarding translation state.
+    func cleanupTranslationSlotState() {
+        for slot in 0..<translationSlots.count {
+            translationSlots[slot].partialTranslationTimer?.cancel()
+            translationSlots[slot].partialTranslationTimer = nil
+            translationSlots[slot].pendingPartialText = nil
+            translationSlots[slot].pendingPartialElapsedTime = nil
+            translationSlots[slot].partialEntryID = nil
+        }
     }
 
     /// Cleans up all recording files and playback state.

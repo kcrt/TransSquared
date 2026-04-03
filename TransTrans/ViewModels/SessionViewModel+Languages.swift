@@ -15,24 +15,24 @@ extension SessionViewModel {
         let oldSourceLangCode = sourceLocale.language.languageCode
         let oldTargetIdentifier = targetLanguageIdentifier
 
-        logger.info("swapLanguages: oldSource='\(oldSourceIdentifier)' (langCode=\(oldSourceLangCode?.identifier ?? "nil")), oldTarget='\(oldTargetIdentifier)'")
+        logger.debug("swapLanguages: oldSource='\(oldSourceIdentifier)' (langCode=\(oldSourceLangCode?.identifier ?? "nil")), oldTarget='\(oldTargetIdentifier)'")
 
         // Find a source locale matching the old target language.
         // Prefer: exact identifier match → user's region → no region → first match
         let targetLang = Locale.Language(identifier: oldTargetIdentifier)
         let targetLangCode = targetLang.languageCode
-        logger.info("swapLanguages: targetLang parsed: languageCode=\(targetLangCode?.identifier ?? "nil"), region=\(targetLang.region?.identifier ?? "nil")")
+        logger.debug("swapLanguages: targetLang parsed: languageCode=\(targetLangCode?.identifier ?? "nil"), region=\(targetLang.region?.identifier ?? "nil")")
 
         let candidates = supportedSourceLocales.filter {
             $0.language.languageCode == targetLangCode
         }
-        logger.info("swapLanguages: candidates=[\(candidates.map(\.identifier).joined(separator: ", "))]")
+        logger.debug("swapLanguages: candidates=[\(candidates.map(\.identifier).joined(separator: ", "))]")
 
         let userRegion = Locale.current.region
-        logger.info("swapLanguages: userRegion=\(userRegion?.identifier ?? "nil")")
+        logger.debug("swapLanguages: userRegion=\(userRegion?.identifier ?? "nil")")
 
         let likelyRegion = Self.likelyRegion(for: oldTargetIdentifier)
-        logger.info("swapLanguages: likelyRegion=\(likelyRegion?.identifier ?? "nil")")
+        logger.debug("swapLanguages: likelyRegion=\(likelyRegion?.identifier ?? "nil")")
 
         let newSource = candidates.first(where: { $0.identifier == oldTargetIdentifier })
             ?? candidates.first(where: { $0.language.region == targetLang.region && targetLang.region != nil })
@@ -41,11 +41,11 @@ extension SessionViewModel {
             ?? candidates.first(where: { $0.identifier.hasPrefix((targetLangCode?.identifier ?? "") + "_US") })
             ?? candidates.first
         if let newSource {
-            logger.info("swapLanguages: selected newSource='\(newSource.identifier)'")
+            logger.debug("swapLanguages: selected newSource='\(newSource.identifier)'")
             sourceLocaleIdentifier = newSource.identifier
             // Use the old source language code as target
             if let code = oldSourceLangCode {
-                logger.info("swapLanguages: setting targetLanguageIdentifier='\(code.identifier)'")
+                logger.debug("swapLanguages: setting targetLanguageIdentifier='\(code.identifier)'")
                 targetLanguageIdentifier = code.identifier
             }
             Task {
@@ -55,11 +55,11 @@ extension SessionViewModel {
             logger.warning("swapLanguages: no matching source locale found for targetLangCode=\(targetLangCode?.identifier ?? "nil")")
         }
 
-        logger.info("swapLanguages: result source='\(self.sourceLocaleIdentifier)', target='\(self.targetLanguageIdentifier)'")
+        logger.debug("swapLanguages: result source='\(self.sourceLocaleIdentifier)', target='\(self.targetLanguageIdentifier)'")
     }
 
     func updateTargetLanguages() async {
-        logger.info("updateTargetLanguages: current source='\(self.sourceLocaleIdentifier)', target='\(self.targetLanguageIdentifier)'")
+        logger.debug("updateTargetLanguages: current source='\(self.sourceLocaleIdentifier)', target='\(self.targetLanguageIdentifier)'")
 
         let availability = LanguageAvailability()
         let allLangs = await availability.supportedLanguages
@@ -83,24 +83,24 @@ extension SessionViewModel {
 
         // Ensure current target is still valid
         let exactMatch = available.contains(where: { $0.minimalIdentifier == targetLanguageIdentifier })
-        logger.info("updateTargetLanguages: exact match for '\(self.targetLanguageIdentifier)' in available: \(exactMatch)")
+        logger.debug("updateTargetLanguages: exact match for '\(self.targetLanguageIdentifier)' in available: \(exactMatch)")
 
         if !exactMatch {
             // Try matching by language code only (e.g. "en" matches "en-US")
             let targetLang = Locale.Language(identifier: targetLanguageIdentifier)
             let candidates = available.filter { $0.languageCode == targetLang.languageCode }
-            logger.info("updateTargetLanguages: fallback candidates for langCode=\(targetLang.languageCode?.identifier ?? "nil"): [\(candidates.map(\.minimalIdentifier).joined(separator: ", "))]")
+            logger.debug("updateTargetLanguages: fallback candidates for langCode=\(targetLang.languageCode?.identifier ?? "nil"): [\(candidates.map(\.minimalIdentifier).joined(separator: ", "))]")
 
             if let match = Self.bestLanguageMatch(from: candidates, for: targetLanguageIdentifier) {
-                logger.info("updateTargetLanguages: re-mapped target '\(self.targetLanguageIdentifier)' → '\(match.minimalIdentifier)'")
+                logger.debug("updateTargetLanguages: re-mapped target '\(self.targetLanguageIdentifier)' → '\(match.minimalIdentifier)'")
                 targetLanguageIdentifier = match.minimalIdentifier
             } else if let first = available.first {
-                logger.info("updateTargetLanguages: no candidate match, defaulting to '\(first.minimalIdentifier)'")
+                logger.debug("updateTargetLanguages: no candidate match, defaulting to '\(first.minimalIdentifier)'")
                 targetLanguageIdentifier = first.minimalIdentifier
             }
         }
 
-        logger.info("updateTargetLanguages: final target='\(self.targetLanguageIdentifier)'")
+        logger.debug("updateTargetLanguages: final target='\(self.targetLanguageIdentifier)'")
     }
 
     // MARK: - Target Language Count

@@ -48,16 +48,21 @@ final class AudioRecordingService {
         return url
     }
 
-    /// Finalizes the recording and returns the file URL.
+    /// Finalizes the recording and returns the file URL on success, or nil on failure.
     func stopRecording() async -> URL? {
         guard let writer = assetWriter else { return nil }
         audioWriterInput?.markAsFinished()
         await writer.finishWriting()
-        logger.info("Recording finalized (status: \(writer.status.rawValue))")
         let url = recordingURL
         assetWriter = nil
         audioWriterInput = nil
-        return url
+        if writer.status == .completed {
+            logger.info("Recording finalized successfully")
+            return url
+        } else {
+            logger.error("Recording finalization failed (status: \(writer.status.rawValue), error: \(writer.error?.localizedDescription ?? "nil"))")
+            return nil
+        }
     }
 
     /// Removes the temporary recording file from disk.

@@ -23,6 +23,7 @@ struct SettingsView: View {
                         .font(.title3)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Close")
             }
             .padding([.top, .horizontal])
             .padding(.bottom, 8)

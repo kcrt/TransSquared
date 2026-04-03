@@ -63,5 +63,7 @@ struct SubtitleOverlayView: View {
         .onTapGesture {
             onDismiss?()
         }
+        .accessibilityLabel("Subtitle overlay")
+        .accessibilityHint("Tap to dismiss")
     }
 }

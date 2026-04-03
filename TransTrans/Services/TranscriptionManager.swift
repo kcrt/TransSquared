@@ -192,11 +192,15 @@ actor TranscriptionManager {
         await audioCaptureService?.stopCapture()
         audioCaptureService = nil
 
-        // Cancel tasks
+        // Cancel tasks and await their completion to avoid use-after-free
         analyzeTask?.cancel()
         resultTask?.cancel()
+        let pendingAnalyze = analyzeTask
+        let pendingResult = resultTask
         analyzeTask = nil
         resultTask = nil
+        _ = try? await pendingAnalyze?.value
+        _ = await pendingResult?.value
 
         // Finish the analyzer
         if let analyzer {

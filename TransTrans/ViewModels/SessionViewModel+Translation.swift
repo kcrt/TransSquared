@@ -164,19 +164,22 @@ extension SessionViewModel {
             let response = try await session.translate(sentence)
             logger.debug("Slot \(slot) translation result (\(isPartial ? "partial" : "final")): \"\(response.targetText, privacy: .private)\"")
 
+            // Re-validate after await: the entries array may have changed during the async gap.
             guard slot < translationSlots.count,
                   let entryIdx = entryIndex(for: entryID),
-                  slot < entries[entryIdx].translations.count else { return }
+                  slot < entries[entryIdx].translations.count else {
+                logger.debug("Slot \(slot) entry \(entryID) no longer valid after translation, discarding result")
+                return
+            }
 
             let existing = entries[entryIdx].translations[slot]
 
             if isPartial {
-                // Only update if the translation is still partial
-                if existing?.isPartial == true {
-                    entries[entryIdx].translations[slot] = TransString(
-                        id: existing!.id, text: response.targetText, isPartial: true
-                    )
-                }
+                // Only update if the translation is still partial (a finalized translation may have arrived)
+                guard existing?.isPartial == true, let existingID = existing?.id else { return }
+                entries[entryIdx].translations[slot] = TransString(
+                    id: existingID, text: response.targetText, isPartial: true
+                )
             } else {
                 entries[entryIdx].translations[slot] = TransString(
                     id: existing?.id ?? UUID(), text: response.targetText, isPartial: false, finalizedAt: Date()

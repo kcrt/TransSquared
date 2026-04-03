@@ -48,6 +48,7 @@ extension SessionViewModel {
 
     func clearHistory() {
         entries = []
+        cleanupTranslationSlotState()
         for slot in 0..<translationSlots.count {
             translationSlots[slot].queue = []
         }
@@ -63,7 +64,7 @@ extension SessionViewModel {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mpeg4Audio]
         panel.nameFieldStringValue = defaultAudioFileName()
-        panel.begin { [sourceURL] response in
+        panel.begin { [weak self, sourceURL] response in
             guard response == .OK, let destURL = panel.url else { return }
             do {
                 if FileManager.default.fileExists(atPath: destURL.path) {
@@ -73,6 +74,9 @@ extension SessionViewModel {
                 logger.info("Audio recording exported to \(destURL.path)")
             } catch {
                 logger.error("Failed to export audio: \(error.localizedDescription)")
+                Task { @MainActor [weak self] in
+                    self?.errorMessage = "Failed to export audio: \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -158,13 +162,16 @@ extension SessionViewModel {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format.contentType]
         panel.nameFieldStringValue = defaultSubtitleFileName(format: format, contentType: contentType)
-        panel.begin { response in
+        panel.begin { [weak self] response in
             guard response == .OK, let destURL = panel.url else { return }
             do {
                 try content.write(to: destURL, atomically: true, encoding: .utf8)
                 logger.info("Subtitle exported to \(destURL.path)")
             } catch {
                 logger.error("Failed to export subtitle: \(error.localizedDescription)")
+                Task { @MainActor [weak self] in
+                    self?.errorMessage = "Failed to export subtitle: \(error.localizedDescription)"
+                }
             }
         }
     }

@@ -80,6 +80,7 @@ struct TranscriptPaneView: View {
                             Image(systemName: playingEntryID == sentenceID ? "stop.fill" : "play.fill")
                                 .font(.system(size: fontSize * 0.65))
                                 .foregroundStyle(Color.accentColor)
+                                .accessibilityLabel(playingEntryID == sentenceID ? "Stop" : "Play")
                         }
                     }
                     .frame(minWidth: 40, alignment: .trailing)
