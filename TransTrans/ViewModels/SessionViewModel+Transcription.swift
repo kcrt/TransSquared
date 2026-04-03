@@ -84,10 +84,12 @@ extension SessionViewModel {
             let sentence = pendingSentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
             pendingSentenceBuffer = ""
             commitSentence(sentence)
-        } else {
-            // Reset the silence timer
+        } else if isTranscribingFile {
+            // File transcription has no audio levels — use event-based timer as fallback.
             resetSentenceBoundaryTimer()
         }
+        // Live sessions: audio-level silence detection in audioLevelTask handles
+        // non-punctuated text, so no event-based timer is needed here.
     }
 
     func resetSentenceBoundaryTimer() {

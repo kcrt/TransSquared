@@ -257,6 +257,8 @@ final class SessionViewModel {
 
     // Sentence-ending punctuation characters
     static let sentenceEndChars: Set<Character> = [".", "。", "!", "?", "！", "？"]
+    /// Normalized audio level at or below which audio is considered silence (≈ -40 dB).
+    static let silenceThreshold: Float = 0.2
     /// Sentence boundary timeout derived from the user-configurable `sentenceBoundarySeconds`.
     var sentenceBoundaryTimeout: Duration { .milliseconds(Int(sentenceBoundarySeconds * 1000)) }
 
@@ -411,12 +413,31 @@ final class SessionViewModel {
                 logger.info("Starting transcription manager...")
                 let streams = try await transcriptionManager.start(locale: sourceLocale, audioDevice: selectedMicrophone, contextualStrings: currentContextualStrings, recordingInput: writerInput, recordingWriter: writer)
 
-                // Start consuming audio levels for waveform display
+                // Start consuming audio levels for waveform display + silence-based sentence boundary
                 if let levelStream = streams.audioLevels {
                     audioLevelTask = Task {
+                        var silenceStart: ContinuousClock.Instant?
                         for await level in levelStream {
                             audioLevelRingBuffer[audioLevelWriteIndex % Self.audioLevelSampleCount] = level
                             audioLevelWriteIndex += 1
+
+                            // Silence-based sentence boundary detection:
+                            // When actual audio silence persists for sentenceBoundarySeconds,
+                            // commit any pending (non-punctuated) text.
+                            if level <= Self.silenceThreshold {
+                                if silenceStart == nil { silenceStart = .now }
+                                if let start = silenceStart,
+                                   ContinuousClock.now - start >= sentenceBoundaryTimeout,
+                                   !pendingSentenceBuffer.isEmpty {
+                                    let sentence = pendingSentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+                                    pendingSentenceBuffer = ""
+                                    commitSentence(sentence)
+                                    // Don't reset silenceStart — still silent, so later
+                                    // finalized text can be committed immediately.
+                                }
+                            } else {
+                                silenceStart = nil
+                            }
                         }
                     }
                 }
