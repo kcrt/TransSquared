@@ -12,11 +12,12 @@ extension SessionViewModel {
         case .partial(let rawText):
             let text = applyAutoReplacements(rawText)
             logger.debug("Event: partial \"\(rawText)\" → \"\(text)\"")
-            // Remove old partial line and add new one
+            // Remove old partial line and add new one, preserving original elapsed time
             if let lastIndex = sourceLines.indices.last, sourceLines[lastIndex].isPartial {
-                sourceLines[lastIndex] = TranscriptLine(text: text, isPartial: true)
+                let originalElapsed = sourceLines[lastIndex].elapsedTime
+                sourceLines[lastIndex] = TranscriptLine(text: text, isPartial: true, elapsedTime: originalElapsed)
             } else {
-                sourceLines.append(TranscriptLine(text: text, isPartial: true))
+                sourceLines.append(TranscriptLine(text: text, isPartial: true, elapsedTime: currentElapsedTime))
             }
 
             // Request partial translation (debounced)
@@ -37,7 +38,7 @@ extension SessionViewModel {
             }
 
             // Append finalized text
-            sourceLines.append(TranscriptLine(text: text, isPartial: false))
+            sourceLines.append(TranscriptLine(text: text, isPartial: false, elapsedTime: currentElapsedTime))
 
             // Add to sentence buffer and check for boundaries
             pendingSentenceBuffer += text

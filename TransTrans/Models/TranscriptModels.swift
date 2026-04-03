@@ -40,6 +40,8 @@ struct TranscriptLine: Identifiable, Sendable {
     var finalizedAt: Date?
     /// True for visual separator lines inserted between sessions.
     var isSeparator: Bool = false
+    /// Cumulative elapsed time (in seconds) from the first session start when this line was created.
+    var elapsedTime: TimeInterval? = nil
 }
 
 extension Array where Element == TranscriptLine {

@@ -6,6 +6,7 @@ struct TranslationQueueItem: Sendable {
     let sentence: String
     let targetIndex: Int
     let isPartial: Bool
+    let elapsedTime: TimeInterval?
 }
 
 /// Encapsulates the mutable translation state for one target language slot.
@@ -30,7 +31,7 @@ struct TranslationSlot {
     /// If `reusePartial` is true and a valid partial line exists, it is reused; otherwise a new placeholder is appended.
     /// Returns the target line index used.
     @discardableResult
-    mutating func enqueueTranslation(sentence: String, isPartial: Bool, resetPartialIndex: Bool = false) -> Int {
+    mutating func enqueueTranslation(sentence: String, isPartial: Bool, resetPartialIndex: Bool = false, elapsedTime: TimeInterval? = nil) -> Int {
         let pIdx = partialTargetIndex
         let hasExistingPartial = pIdx >= 0 && pIdx < lines.count && lines[pIdx].isPartial
 
@@ -38,7 +39,7 @@ struct TranslationSlot {
         if hasExistingPartial {
             targetIndex = pIdx
         } else {
-            lines.append(TranscriptLine(text: "…", isPartial: true))
+            lines.append(TranscriptLine(text: "…", isPartial: true, elapsedTime: elapsedTime))
             targetIndex = lines.count - 1
         }
 
@@ -46,7 +47,7 @@ struct TranslationSlot {
             partialTargetIndex = resetPartialIndex ? -1 : targetIndex
         }
 
-        queue.append(TranslationQueueItem(sentence: sentence, targetIndex: targetIndex, isPartial: isPartial))
+        queue.append(TranslationQueueItem(sentence: sentence, targetIndex: targetIndex, isPartial: isPartial, elapsedTime: elapsedTime))
         // Only invalidate when no session is actively processing — the running session's
         // while-loop will naturally pick up newly enqueued items without needing a restart.
         if !isProcessing {

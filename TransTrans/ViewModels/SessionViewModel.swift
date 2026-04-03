@@ -27,6 +27,14 @@ final class SessionViewModel {
     var exportContent: String?
     var exportDefaultFilename = ""
 
+    // MARK: - File Transcription State
+    var isTranscribingFile = false
+    var showFileImporter = false
+    var fileTranscriptionTask: Task<Void, Never>?
+    var audioFileTranscriber: AudioFileTranscriber?
+    var fileTranscriptionProgress: Double = 0
+    var fileAudioDuration: TimeInterval = 0
+
     /// Custom vocabulary words per source locale, keyed by locale identifier (persisted via UserDefaults).
     var contextualStringsByLocale: [String: [String]] = SessionViewModel.loadFromUserDefaults(forKey: "contextualStringsByLocale") ?? [:] {
         didSet { persistToUserDefaults(contextualStringsByLocale, forKey: "contextualStringsByLocale") }
@@ -140,7 +148,21 @@ final class SessionViewModel {
     var sentenceBoundaryGeneration: UInt64 = 0
     var pendingSentenceBuffer = ""
     var sessionStartDate: Date?
+    /// Total elapsed time accumulated from previous start/stop cycles.
+    var accumulatedElapsedTime: TimeInterval = 0
     var segmentIndex = 0
+
+    /// Cumulative elapsed time from the first session start to now,
+    /// accounting for time accumulated across previous start/stop cycles.
+    var currentElapsedTime: TimeInterval {
+        let currentSegment: TimeInterval
+        if let start = sessionStartDate {
+            currentSegment = Date().timeIntervalSince(start)
+        } else {
+            currentSegment = 0
+        }
+        return accumulatedElapsedTime + currentSegment
+    }
 
     static let partialTranslationDebounce: Duration = .milliseconds(300)
 
@@ -329,6 +351,12 @@ final class SessionViewModel {
             commitSentence(pendingSentenceBuffer)
             pendingSentenceBuffer = ""
         }
+
+        // Accumulate elapsed time from this session segment
+        if let start = sessionStartDate {
+            accumulatedElapsedTime += Date().timeIntervalSince(start)
+        }
+        sessionStartDate = nil
 
         // Await full teardown so the microphone is released before any restart
         await transcriptionManager.stop()

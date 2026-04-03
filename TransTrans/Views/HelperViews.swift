@@ -37,6 +37,96 @@ struct CheckmarkLabel: View {
     }
 }
 
+// MARK: - File Transcription Progress Sheet
+
+/// A small sheet shown while an audio file is being transcribed.
+struct FileTranscriptionProgressView: View {
+    var viewModel: SessionViewModel
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Transcribing Audio File…")
+                .font(.headline)
+
+            // Transcription progress
+            VStack(alignment: .leading, spacing: 4) {
+                Text(transcriptionLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ProgressView(value: viewModel.fileTranscriptionProgress)
+                    .progressViewStyle(.linear)
+            }
+
+            // Translation progress per slot
+            ForEach(0..<viewModel.targetCount, id: \.self) { slot in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(translationLabel(slot: slot))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if viewModel.fileTranscriptionProgress >= 1.0 {
+                        ProgressView(value: viewModel.fileTranslationProgress(forSlot: slot))
+                            .progressViewStyle(.linear)
+                    } else {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                    }
+                }
+            }
+
+            // Show the latest partial text as real-time feedback.
+            if let lastPartial = viewModel.sourceLines.last, lastPartial.isPartial {
+                Text(lastPartial.text)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Button("Cancel") {
+                viewModel.cancelFileTranscription()
+            }
+            .keyboardShortcut(.cancelAction)
+        }
+        .padding(24)
+        .frame(width: 400)
+    }
+
+    // MARK: - Formatted Labels
+
+    private var transcriptionLabel: String {
+        let progress = viewModel.fileTranscriptionProgress
+        let duration = viewModel.fileAudioDuration
+        let pct = Int(progress * 100)
+        guard duration > 0 else {
+            return String(localized: "Transcription")
+        }
+        let elapsed = formatTime(progress * duration)
+        let total = formatTime(duration)
+        return String(localized: "Transcription") + " — \(pct)% (\(elapsed) / \(total))"
+    }
+
+    private func translationLabel(slot: Int) -> String {
+        let langId = viewModel.targetLanguageIdentifiers[slot]
+        let langName = Locale.current.localizedString(forIdentifier: langId) ?? langId
+        let base = String(localized: "Translation") + " (\(langName))"
+
+        guard viewModel.fileTranscriptionProgress >= 1.0, viewModel.segmentIndex > 0 else {
+            return base
+        }
+        let total = viewModel.segmentIndex
+        let progress = viewModel.fileTranslationProgress(forSlot: slot)
+        let completed = Int(Double(total) * progress)
+        let pct = Int(progress * 100)
+        return base + " — \(pct)% (\(completed)/\(total))"
+    }
+
+    private func formatTime(_ seconds: TimeInterval) -> String {
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%d:%02d", mins, secs)
+    }
+}
+
 // MARK: - Audio Waveform Visualization
 
 struct AudioWaveformView: View {

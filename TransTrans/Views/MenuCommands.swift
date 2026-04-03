@@ -16,8 +16,16 @@ struct AppMenuCommands: Commands {
             .disabled(viewModel == nil)
         }
 
-        // File menu: Save transcript
+        // File menu: Transcribe audio file + Save transcript
         CommandGroup(replacing: .saveItem) {
+            Button("Transcribe Audio File...") {
+                viewModel?.showFileImporter = true
+            }
+            .keyboardShortcut("o")
+            .disabled(transcribeFileDisabled)
+
+            Divider()
+
             Button("Save Original...") {
                 viewModel?.saveTranscript(contentType: .original)
             }
@@ -251,6 +259,11 @@ struct AppMenuCommands: Commands {
     private var removeTargetDisabled: Bool {
         guard let vm = viewModel else { return true }
         return vm.isSessionActive || vm.targetCount <= 1
+    }
+
+    private var transcribeFileDisabled: Bool {
+        guard let vm = viewModel else { return true }
+        return vm.isSessionActive || vm.isTranscribingFile
     }
 
     private var subtitleButtonDisabled: Bool {

@@ -15,7 +15,8 @@ struct ContentView: View {
             TranscriptPaneView(
                 lines: viewModel.sourceLines,
                 fontSize: viewModel.fontSize,
-                placeholder: viewModel.isSessionActive ? nil : sourcePlaceholder
+                placeholder: viewModel.isSessionActive ? nil : sourcePlaceholder,
+                showElapsedTime: true
             )
             Divider()
 
@@ -108,7 +109,8 @@ struct ContentView: View {
         TranscriptPaneView(
             lines: lines,
             fontSize: viewModel.fontSize,
-            placeholder: placeholder
+            placeholder: placeholder,
+            showElapsedTime: true
         )
     }
 
@@ -166,6 +168,20 @@ private struct SheetsAndAlerts: ViewModifier {
         content
             .sheet(isPresented: $viewModel.showSettings) {
                 SettingsView(viewModel: viewModel)
+            }
+            .sheet(isPresented: $viewModel.isTranscribingFile, onDismiss: {
+                viewModel.cancelFileTranscription()
+            }) {
+                FileTranscriptionProgressView(viewModel: viewModel)
+            }
+            .fileImporter(
+                isPresented: $viewModel.showFileImporter,
+                allowedContentTypes: [.wav, .mp3, .mpeg4Audio, .aiff, .audio],
+                allowsMultipleSelection: false
+            ) { result in
+                if case .success(let urls) = result, let url = urls.first {
+                    viewModel.transcribeAudioFile(url: url)
+                }
             }
             .fileExporter(
                 isPresented: $viewModel.isExporterPresented,

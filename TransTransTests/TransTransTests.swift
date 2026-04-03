@@ -216,7 +216,7 @@ struct TranscriptionEventTests {
         #expect(vm.sourceLines.count == 1)
         #expect(vm.sourceLines[0].isPartial == true)
 
-        vm.handleTranscriptionEvent(.final_("Hello world."))
+        vm.handleTranscriptionEvent(.finalized("Hello world."))
         // Partial removed, final appended
         #expect(vm.sourceLines.count == 1)
         #expect(vm.sourceLines[0].text == "Hello world.")
@@ -225,14 +225,14 @@ struct TranscriptionEventTests {
 
     @Test func finalEventPopulatesPendingSentenceBuffer() {
         let vm = SessionViewModel()
-        vm.handleTranscriptionEvent(.final_("Hello"))
+        vm.handleTranscriptionEvent(.finalized("Hello"))
         #expect(vm.pendingSentenceBuffer == "Hello")
     }
 
     @Test func multipleFinalEventsAccumulateBuffer() {
         let vm = SessionViewModel()
-        vm.handleTranscriptionEvent(.final_("Hello "))
-        vm.handleTranscriptionEvent(.final_("world"))
+        vm.handleTranscriptionEvent(.finalized("Hello "))
+        vm.handleTranscriptionEvent(.finalized("world"))
         // "Hello " ends without sentence-ending punctuation, so buffer accumulates
         #expect(vm.pendingSentenceBuffer == "Hello world")
     }
@@ -557,5 +557,83 @@ struct HasTranscriptContentTests {
         vm.translationSlots = []
         // Should not crash, should return false
         #expect(vm.hasTranscriptContent == false)
+    }
+}
+
+// MARK: - 12. Audio File Transcription Tests
+
+/// Anchor class used to locate the test bundle at runtime.
+private final class TestBundleAnchor {}
+
+struct AudioFileTranscriptionTests {
+
+    /// Resolves a test audio file URL from the test bundle.
+    private func audioFileURL(_ name: String, ext: String) -> URL? {
+        let bundle = Bundle(for: TestBundleAnchor.self)
+        return bundle.url(forResource: name, withExtension: ext)
+            ?? bundle.url(forResource: name, withExtension: ext, subdirectory: "sounds")
+    }
+
+    /// Helper: collects all finalized texts from a transcription stream.
+    private func collectFinalizedTexts(from stream: AsyncStream<TranscriptionEvent>) async -> [String] {
+        var texts: [String] = []
+        for await event in stream {
+            if case .finalized(let text) = event {
+                texts.append(text)
+            }
+        }
+        return texts
+    }
+
+    @Test func transcribeHelloAudio() async throws {
+        guard let url = audioFileURL("hello", ext: "m4a") else {
+            Issue.record("hello.m4a not found in test bundle")
+            return
+        }
+
+        let transcriber = AudioFileTranscriber()
+        let stream = try await transcriber.transcribe(
+            fileURL: url,
+            locale: Locale(identifier: "en_US")
+        )
+
+        let texts = await collectFinalizedTexts(from: stream)
+        let fullText = texts.joined(separator: " ").lowercased()
+        #expect(fullText.contains("hello"), "Expected 'hello' in transcription, got: \"\(fullText)\"")
+    }
+
+    @Test func transcribeSentenceAudio() async throws {
+        guard let url = audioFileURL("sentence", ext: "m4a") else {
+            Issue.record("sentence.m4a not found in test bundle")
+            return
+        }
+
+        let transcriber = AudioFileTranscriber()
+        let stream = try await transcriber.transcribe(
+            fileURL: url,
+            locale: Locale(identifier: "en_US")
+        )
+
+        let texts = await collectFinalizedTexts(from: stream)
+        let fullText = texts.joined(separator: " ").lowercased()
+        // Expected: "Formerly most Japanese houses were made of wood."
+        let hasExpectedWord = fullText.contains("japanese")
+            || fullText.contains("house")
+            || fullText.contains("wood")
+        #expect(hasExpectedWord, "Expected key words in transcription, got: \"\(fullText)\"")
+    }
+
+    @Test func transcribeNonexistentFileThrows() async {
+        let badURL = URL(fileURLWithPath: "/nonexistent/file.m4a")
+        let transcriber = AudioFileTranscriber()
+        do {
+            _ = try await transcriber.transcribe(
+                fileURL: badURL,
+                locale: Locale(identifier: "en_US")
+            )
+            Issue.record("Expected an error for nonexistent file")
+        } catch {
+            // Expected — AVAudioFile throws when the file doesn't exist.
+        }
     }
 }

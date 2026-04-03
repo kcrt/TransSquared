@@ -8,7 +8,7 @@ A macOS application for real-time speech transcription and translation. TransTra
 
 - **Real-time transcription** — Live speech-to-text using Apple's Speech framework with progressive transcription
 - **Automatic translation** — Instant translation of transcribed text via Apple's Translation framework
-- **Multi-target language support** — Translate into up to 5 target languages simultaneously, with one-click language swap (⌘⇧S)
+- **Multi-target language support** — Translate into up to 3 target languages simultaneously, with one-click language swap (⌘⇧S)
 - **Audio level visualization** — Color-coded waveform display (green/orange/red)
 - **Always-on-top mode** — Keep the window above other applications (⌘T)
 - **Subtitle mode** — Movie-style subtitle overlay at the bottom of the screen, showing translation only (⌘D); lines auto-expire after 30 seconds
@@ -17,7 +17,6 @@ A macOS application for real-time speech transcription and translation. TransTra
 
 - macOS 26 or later
 - Microphone access
-- Network access (for downloading speech recognition assets and translation models)
 
 ## Architecture
 
@@ -26,17 +25,19 @@ TransTransApp
 └── ContentView
     ├── ContentView+Toolbar (native macOS toolbar: record, save, display, language, font)
     ├── MenuCommands (global menu bar commands & shortcuts)
-    ├── TranscriptPaneView (×N: source + up to 5 targets)
+    ├── TranscriptPaneView (×N: source + up to 3 targets)
     ├── SettingsView (custom vocabulary sheet)
     ├── SubtitleWindowController (borderless overlay window)
     │   └── SubtitleOverlayView (subtitle-style translation display)
-    └── VisualEffectBackground (frosted glass effect)
+    └── HelperViews (reusable menu items, checkmark labels)
 
 SessionViewModel (@Observable)
 ├── +Transcription (event handling, sentence boundary detection)
 ├── +Translation (translation queue, multi-target dispatch)
 ├── +Languages (language configuration, swap logic)
 ├── +Permissions (microphone & speech authorization)
+├── +Export (save/copy transcript in various formats)
+├── +FileTranscription (transcribe audio files)
 ├── TranscriptionManager (actor: audio → transcription pipeline)
 │   ├── AudioCaptureService (AVCaptureSession, format conversion)
 │   └── AudioCaptureDelegate (sample buffer → PCM conversion, RMS)
@@ -69,7 +70,6 @@ SessionViewModel (@Observable)
 |---|---|
 | `com.apple.security.app-sandbox` | App Sandbox |
 | `com.apple.security.device.audio-input` | Microphone access |
-| `com.apple.security.network.client` | Network access for model downloads |
 
 ## Build
 

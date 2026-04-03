@@ -54,6 +54,8 @@ extension SessionViewModel {
         for slot in 0..<translationSlots.count {
             translationSlots[slot].lines = []
         }
+        accumulatedElapsedTime = 0
+        sessionStartDate = nil
     }
 
     func copyAllOriginal() -> String {

@@ -6,6 +6,7 @@ struct TranscriptPaneView: View {
     var lines: [TranscriptLine]
     var fontSize: CGFloat
     var placeholder: String?
+    var showElapsedTime: Bool = false
 
     var body: some View {
         if lines.isEmpty, let placeholder {
@@ -23,13 +24,21 @@ struct TranscriptPaneView: View {
                                     .padding(.vertical, 4)
                                     .id(line.id)
                             } else {
-                                Text(line.text)
-                                    .font(.system(size: fontSize))
-                                    .foregroundStyle(line.isPartial ? .secondary : .primary)
-                                    .italic(line.isPartial)
-                                    .id(line.id)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    if showElapsedTime, let elapsed = line.elapsedTime {
+                                        Text(formatElapsedTime(elapsed))
+                                            .font(.system(size: fontSize * 0.75, design: .monospaced))
+                                            .foregroundStyle(.tertiary)
+                                            .frame(minWidth: 40, alignment: .trailing)
+                                    }
+                                    Text(line.text)
+                                        .font(.system(size: fontSize))
+                                        .foregroundStyle(line.isPartial ? .secondary : .primary)
+                                        .italic(line.isPartial)
+                                        .textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                .id(line.id)
                             }
                         }
                     }
@@ -45,5 +54,13 @@ struct TranscriptPaneView: View {
                 }
             }
         }
+    }
+
+    /// Formats elapsed seconds as MM:SS (e.g., "03:45").
+    private func formatElapsedTime(_ seconds: TimeInterval) -> String {
+        let totalSeconds = max(0, Int(seconds))
+        let mins = totalSeconds / 60
+        let secs = totalSeconds % 60
+        return String(format: "%02d:%02d", mins, secs)
     }
 }
