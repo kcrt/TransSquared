@@ -28,6 +28,10 @@ struct SettingsView: View {
             .padding(.bottom, 8)
 
             TabView {
+                GeneralTab(viewModel: viewModel)
+                    .tabItem {
+                        Label("General", systemImage: "gearshape")
+                    }
                 VocabularyTab(viewModel: viewModel, localeDisplayName: localeDisplayName)
                     .tabItem {
                         Label("Custom Vocabulary", systemImage: "text.book.closed")
@@ -39,6 +43,41 @@ struct SettingsView: View {
             }
         }
         .frame(width: 420, height: 440)
+    }
+}
+
+// MARK: - General Tab
+
+private struct GeneralTab: View {
+    @Bindable var viewModel: SessionViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Silence Duration for Sentence Boundary")
+                .font(.subheadline.bold())
+
+            Text("Duration of silence before the current speech segment is finalized as a sentence.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Text("0.5s")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Slider(value: $viewModel.sentenceBoundarySeconds, in: 0.5...5.0, step: 0.5)
+                Text("5.0s")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("\(viewModel.sentenceBoundarySeconds, specifier: "%.1f") seconds")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            Spacer()
+        }
+        .padding()
     }
 }
 

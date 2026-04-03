@@ -79,6 +79,11 @@ final class SessionViewModel {
         set { autoReplacementsByLocale[sourceLocaleIdentifier] = newValue }
     }
 
+    /// Silence duration (in seconds) before a sentence boundary is assumed (persisted via UserDefaults).
+    var sentenceBoundarySeconds: Double = UserDefaults.standard.object(forKey: "sentenceBoundarySeconds") as? Double ?? 3.0 {
+        didSet { UserDefaults.standard.set(sentenceBoundarySeconds, forKey: "sentenceBoundarySeconds") }
+    }
+
     /// Applies auto-replacement rules to the given text.
     func applyAutoReplacements(_ text: String) -> String {
         var result = text
@@ -212,7 +217,8 @@ final class SessionViewModel {
 
     // Sentence-ending punctuation characters
     static let sentenceEndChars: Set<Character> = [".", "。", "!", "?", "！", "？"]
-    static let sentenceBoundaryTimeout: Duration = .seconds(3)
+    /// Sentence boundary timeout derived from the user-configurable `sentenceBoundarySeconds`.
+    var sentenceBoundaryTimeout: Duration { .milliseconds(Int(sentenceBoundarySeconds * 1000)) }
 
     // MARK: - Device Monitoring
 

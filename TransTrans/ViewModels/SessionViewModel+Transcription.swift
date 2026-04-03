@@ -79,7 +79,7 @@ extension SessionViewModel {
                 let currentGen = sentenceBoundaryGeneration
                 if currentGen == lastGen { break }
                 lastGen = currentGen
-                try? await Task.sleep(for: Self.sentenceBoundaryTimeout)
+                try? await Task.sleep(for: sentenceBoundaryTimeout)
             }
             guard !Task.isCancelled, !pendingSentenceBuffer.isEmpty else { return }
             let sentence = pendingSentenceBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
