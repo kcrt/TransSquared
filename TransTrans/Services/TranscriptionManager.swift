@@ -1,11 +1,33 @@
 import Speech
 import AVFoundation
+import CoreMedia
 import os
 
 enum TranscriptionEvent: Sendable {
-    case partial(String)
-    case finalized(String)
+    case partial(String, duration: TimeInterval?)
+    case finalized(String, duration: TimeInterval?)
     case error(String)
+}
+
+/// Extracts the total spoken-audio duration from a `SpeechTranscriber.Result`'s
+/// attributed string by reading `TimeRangeAttribute` runs.
+func extractAudioDuration(from text: AttributedString) -> TimeInterval? {
+    var minStart: CMTime?
+    var maxEnd: CMTime?
+    for run in text.runs {
+        guard let timeRange = run[AttributeScopes.SpeechAttributes.TimeRangeAttribute.self] else { continue }
+        let start = timeRange.start
+        let end = CMTimeAdd(start, timeRange.duration)
+        if minStart == nil || CMTimeCompare(start, minStart!) < 0 {
+            minStart = start
+        }
+        if maxEnd == nil || CMTimeCompare(end, maxEnd!) > 0 {
+            maxEnd = end
+        }
+    }
+    guard let start = minStart, let end = maxEnd else { return nil }
+    let seconds = CMTimeGetSeconds(CMTimeSubtract(end, start))
+    return seconds > 0 ? seconds : nil
 }
 
 /// Streams returned by `TranscriptionManager.start()`.
@@ -32,9 +54,9 @@ actor TranscriptionManager {
 
         logger.info("Starting transcription for locale: \(locale.identifier)")
 
-        // Create transcriber with progressive preset (volatile + fast results)
-        let newTranscriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
-        logger.debug("Created SpeechTranscriber with .progressiveTranscription preset")
+        // Create transcriber with time-indexed progressive preset (volatile + fast + audioTimeRange)
+        let newTranscriber = SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
+        logger.debug("Created SpeechTranscriber with .timeIndexedProgressiveTranscription preset")
 
         // Ensure assets are installed
         logger.info("Checking speech assets...")
@@ -106,12 +128,13 @@ actor TranscriptionManager {
                 for try await result in capturedTranscriber.results {
                     resultCount += 1
                     let text = String(result.text.characters)
+                    let duration = extractAudioDuration(from: result.text)
                     if result.isFinal {
-                        logger.info("Final result #\(resultCount): \"\(text)\"")
-                        capturedContinuation.yield(.finalized(text))
+                        logger.info("Final result #\(resultCount): \"\(text)\" (duration: \(duration.map { String(format: "%.2fs", $0) } ?? "nil"))")
+                        capturedContinuation.yield(.finalized(text, duration: duration))
                     } else {
                         logger.debug("Partial result #\(resultCount): \"\(text)\"")
-                        capturedContinuation.yield(.partial(text))
+                        capturedContinuation.yield(.partial(text, duration: duration))
                     }
                 }
                 logger.info("Transcriber results stream ended (total: \(resultCount))")

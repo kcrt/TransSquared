@@ -21,6 +21,8 @@ final class SessionViewModel {
     var showSettings = false
     var displayMode: DisplayMode = .normal
     var permissionIssue: PermissionIssue?
+    /// The sentenceID currently highlighted across all panes (set by tapping a timestamp).
+    var highlightedSentenceID: UUID?
 
     // MARK: - File Export State
     var isExporterPresented = false
@@ -150,6 +152,8 @@ final class SessionViewModel {
     var sentenceBoundaryTimer: Task<Void, Never>?
     var sentenceBoundaryGeneration: UInt64 = 0
     var pendingSentenceBuffer = ""
+    /// Indices of finalized source lines accumulated since the last sentence commit.
+    var uncommittedSourceLineIndices: [Int] = []
     var sessionStartDate: Date?
     /// Total elapsed time accumulated from previous start/stop cycles.
     var accumulatedElapsedTime: TimeInterval = 0
@@ -282,6 +286,7 @@ final class SessionViewModel {
         }
 
         pendingSentenceBuffer = ""
+        uncommittedSourceLineIndices = []
         segmentIndex = 0
         sessionStartDate = Date()
 

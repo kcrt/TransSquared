@@ -9,21 +9,21 @@ extension SessionViewModel {
 
     func handleTranscriptionEvent(_ event: TranscriptionEvent) {
         switch event {
-        case .partial(let rawText):
+        case .partial(let rawText, let duration):
             let text = applyAutoReplacements(rawText)
             logger.debug("Event: partial \"\(rawText)\" → \"\(text)\"")
             // Remove old partial line and add new one, preserving original elapsed time
             if let lastIndex = sourceLines.indices.last, sourceLines[lastIndex].isPartial {
                 let originalElapsed = sourceLines[lastIndex].elapsedTime
-                sourceLines[lastIndex] = TranscriptLine(text: text, isPartial: true, elapsedTime: originalElapsed)
+                sourceLines[lastIndex] = TranscriptLine(text: text, isPartial: true, elapsedTime: originalElapsed, duration: duration)
             } else {
-                sourceLines.append(TranscriptLine(text: text, isPartial: true, elapsedTime: currentElapsedTime))
+                sourceLines.append(TranscriptLine(text: text, isPartial: true, elapsedTime: currentElapsedTime, duration: duration))
             }
 
             // Request partial translation (debounced)
             requestPartialTranslation(for: pendingSentenceBuffer + text)
 
-        case .finalized(let rawText):
+        case .finalized(let rawText, let duration):
             let text = applyAutoReplacements(rawText)
             logger.info("Event: final \"\(rawText)\" → \"\(text)\"")
             // Cancel any pending partial translation timers
@@ -38,7 +38,8 @@ extension SessionViewModel {
             }
 
             // Append finalized text
-            sourceLines.append(TranscriptLine(text: text, isPartial: false, elapsedTime: currentElapsedTime))
+            sourceLines.append(TranscriptLine(text: text, isPartial: false, elapsedTime: currentElapsedTime, duration: duration))
+            uncommittedSourceLineIndices.append(sourceLines.count - 1)
 
             // Add to sentence buffer and check for boundaries
             pendingSentenceBuffer += text

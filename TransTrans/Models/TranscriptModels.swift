@@ -42,6 +42,13 @@ struct TranscriptLine: Identifiable, Sendable {
     var isSeparator: Bool = false
     /// Cumulative elapsed time (in seconds) from the first session start when this line was created.
     var elapsedTime: TimeInterval? = nil
+    /// The duration of spoken audio for this line, in seconds.
+    /// Only available when the transcriber provides audio time-range attributes.
+    var duration: TimeInterval? = nil
+    /// Groups source lines and their corresponding translation line(s).
+    /// All source lines accumulated into the same committed sentence share
+    /// the same sentenceID as the resulting translation line.
+    var sentenceID: UUID? = nil
 }
 
 extension Array where Element == TranscriptLine {

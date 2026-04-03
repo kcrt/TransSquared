@@ -34,14 +34,18 @@ extension SessionViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
+        // Use the elapsed time from the current partial source line
+        let sourceElapsedTime = sourceLines.last?.elapsedTime
+
         for slot in 0..<targetCount {
-            requestPartialTranslationForSlot(slot, text: trimmed)
+            requestPartialTranslationForSlot(slot, text: trimmed, elapsedTime: sourceElapsedTime)
         }
     }
 
-    private func requestPartialTranslationForSlot(_ slot: Int, text: String) {
+    private func requestPartialTranslationForSlot(_ slot: Int, text: String, elapsedTime: TimeInterval?) {
         guard slot < translationSlots.count else { return }
         translationSlots[slot].pendingPartialText = text
+        translationSlots[slot].pendingPartialElapsedTime = elapsedTime
         translationSlots[slot].partialDebounceGeneration &+= 1
 
         // If a debounce task is already running, it will detect the new generation and re-wait.
@@ -64,9 +68,11 @@ extension SessionViewModel {
             }
             guard !Task.isCancelled, capturedSlot < translationSlots.count,
                   let text = translationSlots[capturedSlot].pendingPartialText else { return }
+            let elapsed = translationSlots[capturedSlot].pendingPartialElapsedTime
             translationSlots[capturedSlot].pendingPartialText = nil
+            translationSlots[capturedSlot].pendingPartialElapsedTime = nil
 
-            let idx = translationSlots[capturedSlot].enqueueTranslation(sentence: text, isPartial: true, elapsedTime: currentElapsedTime)
+            let idx = translationSlots[capturedSlot].enqueueTranslation(sentence: text, isPartial: true, elapsedTime: elapsed)
             logger.debug("Queuing partial translation slot \(capturedSlot) (targetIndex: \(idx)): \"\(text)\"")
         }
     }
@@ -75,20 +81,37 @@ extension SessionViewModel {
         guard !sentence.isEmpty else { return }
 
         segmentIndex += 1
+        let sid = UUID()
+
+        // Use the elapsed time from the first source line in this sentence group
+        // so the translation timestamp matches the transcription timestamp.
+        let sourceElapsedTime = uncommittedSourceLineIndices.first.flatMap { idx in
+            idx < sourceLines.count ? sourceLines[idx].elapsedTime : nil
+        }
+
+        // Tag all accumulated source lines with this sentenceID
+        for idx in uncommittedSourceLineIndices {
+            if idx < sourceLines.count {
+                sourceLines[idx].sentenceID = sid
+            }
+        }
+        uncommittedSourceLineIndices = []
+
         logger.info("Committing sentence #\(self.segmentIndex): \"\(sentence)\"")
 
         for slot in 0..<targetCount {
-            commitSentenceForSlot(slot, sentence: sentence)
+            commitSentenceForSlot(slot, sentence: sentence, sentenceID: sid, elapsedTime: sourceElapsedTime)
         }
     }
 
-    private func commitSentenceForSlot(_ slot: Int, sentence: String) {
+    private func commitSentenceForSlot(_ slot: Int, sentence: String, sentenceID: UUID, elapsedTime: TimeInterval?) {
         guard slot < translationSlots.count else { return }
         translationSlots[slot].partialTranslationTimer?.cancel()
         translationSlots[slot].partialTranslationTimer = nil
         translationSlots[slot].pendingPartialText = nil
+        translationSlots[slot].pendingPartialElapsedTime = nil
 
-        let idx = translationSlots[slot].enqueueTranslation(sentence: sentence, isPartial: false, resetPartialIndex: true, elapsedTime: currentElapsedTime)
+        let idx = translationSlots[slot].enqueueTranslation(sentence: sentence, isPartial: false, resetPartialIndex: true, elapsedTime: elapsedTime, sentenceID: sentenceID)
         logger.debug("Queuing for translation (slot: \(slot), targetIndex: \(idx))")
     }
 
@@ -102,13 +125,15 @@ extension SessionViewModel {
                   targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count else { return }
             // For partial translations, only update if the line is still partial
             // (a final translation may have already replaced it)
-            let elapsed = translationSlots[slot].lines[targetIndex].elapsedTime
+            let existingLine = translationSlots[slot].lines[targetIndex]
+            let elapsed = existingLine.elapsedTime
+            let sid = existingLine.sentenceID
             if isPartial {
-                if translationSlots[slot].lines[targetIndex].isPartial {
-                    translationSlots[slot].lines[targetIndex] = TranscriptLine(text: response.targetText, isPartial: true, elapsedTime: elapsed)
+                if existingLine.isPartial {
+                    translationSlots[slot].lines[targetIndex] = TranscriptLine(text: response.targetText, isPartial: true, elapsedTime: elapsed, sentenceID: sid)
                 }
             } else {
-                translationSlots[slot].lines[targetIndex] = TranscriptLine(text: response.targetText, isPartial: false, finalizedAt: Date(), elapsedTime: elapsed)
+                translationSlots[slot].lines[targetIndex] = TranscriptLine(text: response.targetText, isPartial: false, finalizedAt: Date(), elapsedTime: elapsed, sentenceID: sid)
             }
         } catch is CancellationError {
             // Task was cancelled (e.g. session stopped) — not a real failure.
@@ -119,10 +144,10 @@ extension SessionViewModel {
             let nsError = error as NSError
             logger.info("Slot \(slot) translation session cancelled (domain: \(nsError.domain), code: \(nsError.code)), re-enqueueing")
             if slot < translationSlots.count {
-                let elapsed = targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count
-                    ? translationSlots[slot].lines[targetIndex].elapsedTime : nil
+                let existingLine = targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count
+                    ? translationSlots[slot].lines[targetIndex] : nil
                 translationSlots[slot].queue.insert(
-                    TranslationQueueItem(sentence: sentence, targetIndex: targetIndex, isPartial: isPartial, elapsedTime: elapsed), at: 0
+                    TranslationQueueItem(sentence: sentence, targetIndex: targetIndex, isPartial: isPartial, elapsedTime: existingLine?.elapsedTime, sentenceID: existingLine?.sentenceID), at: 0
                 )
             }
         } catch {
@@ -131,8 +156,8 @@ extension SessionViewModel {
             if !isPartial {
                 if slot < translationSlots.count,
                    targetIndex >= 0 && targetIndex < translationSlots[slot].lines.count {
-                    let elapsed = translationSlots[slot].lines[targetIndex].elapsedTime
-                    translationSlots[slot].lines[targetIndex] = TranscriptLine(text: "[Translation failed]", isPartial: false, finalizedAt: Date(), elapsedTime: elapsed)
+                    let existingLine = translationSlots[slot].lines[targetIndex]
+                    translationSlots[slot].lines[targetIndex] = TranscriptLine(text: "[Translation failed]", isPartial: false, finalizedAt: Date(), elapsedTime: existingLine.elapsedTime, sentenceID: existingLine.sentenceID)
                 }
             }
         }

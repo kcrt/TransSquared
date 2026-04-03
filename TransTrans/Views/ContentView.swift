@@ -16,7 +16,18 @@ struct ContentView: View {
                 lines: viewModel.sourceLines,
                 fontSize: viewModel.fontSize,
                 placeholder: viewModel.isSessionActive ? nil : sourcePlaceholder,
-                showElapsedTime: true
+                showElapsedTime: true,
+                isEditable: viewModel.displayMode == .normal,
+                onLineEdited: { id, newText in
+                    viewModel.editSourceLine(id: id, newText: newText)
+                },
+                onTimestampTapped: { sentenceID in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        viewModel.highlightedSentenceID =
+                            viewModel.highlightedSentenceID == sentenceID ? nil : sentenceID
+                    }
+                },
+                highlightedSentenceID: viewModel.highlightedSentenceID
             )
             Divider()
 
@@ -106,11 +117,23 @@ struct ContentView: View {
                 ? String(localized: "Translation will appear here")
                 : langId
         )
+        let capturedSlot = slot
         TranscriptPaneView(
             lines: lines,
             fontSize: viewModel.fontSize,
             placeholder: placeholder,
-            showElapsedTime: true
+            showElapsedTime: true,
+            isEditable: viewModel.displayMode == .normal,
+            onLineEdited: { id, newText in
+                viewModel.editTranslationLine(slot: capturedSlot, id: id, newText: newText)
+            },
+            onTimestampTapped: { sentenceID in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    viewModel.highlightedSentenceID =
+                        viewModel.highlightedSentenceID == sentenceID ? nil : sentenceID
+                }
+            },
+            highlightedSentenceID: viewModel.highlightedSentenceID
         )
     }
 

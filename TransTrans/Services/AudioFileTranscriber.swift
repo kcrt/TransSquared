@@ -1,5 +1,6 @@
 import Speech
 import AVFoundation
+import CoreMedia
 import os
 
 /// Transcribes an audio file using the Speech framework's SpeechTranscriber.
@@ -32,8 +33,14 @@ actor AudioFileTranscriber {
         let duration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
         logger.info("Audio: \(audioFile.fileFormat.sampleRate) Hz, \(audioFile.length) frames, \(String(format: "%.1f", duration))s")
 
-        // Use .transcription preset for accurate offline recognition
-        let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
+        // Use .transcription preset options with audioTimeRange for accurate offline recognition
+        let basePreset = SpeechTranscriber.Preset.transcription
+        let transcriber = SpeechTranscriber(
+            locale: locale,
+            transcriptionOptions: basePreset.transcriptionOptions,
+            reportingOptions: basePreset.reportingOptions,
+            attributeOptions: basePreset.attributeOptions.union([.audioTimeRange])
+        )
 
         // Ensure speech assets are installed
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
@@ -79,12 +86,13 @@ actor AudioFileTranscriber {
                 do {
                     for try await result in transcriber.results {
                         let text = String(result.text.characters)
+                        let duration = extractAudioDuration(from: result.text)
                         if result.isFinal {
-                            capturedLogger.info("Final: \"\(text)\"")
-                            continuation.yield(.finalized(text))
+                            capturedLogger.info("Final: \"\(text)\" (duration: \(duration.map { String(format: "%.2fs", $0) } ?? "nil"))")
+                            continuation.yield(.finalized(text, duration: duration))
                         } else {
                             capturedLogger.debug("Partial: \"\(text)\"")
-                            continuation.yield(.partial(text))
+                            continuation.yield(.partial(text, duration: duration))
                         }
                     }
                     capturedLogger.info("Results stream ended")

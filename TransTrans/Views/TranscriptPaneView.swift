@@ -7,6 +7,16 @@ struct TranscriptPaneView: View {
     var fontSize: CGFloat
     var placeholder: String?
     var showElapsedTime: Bool = false
+    var isEditable: Bool = false
+    var onLineEdited: ((UUID, String) -> Void)?
+    /// Called when a timestamp is tapped; passes the sentenceID of the tapped line.
+    var onTimestampTapped: ((UUID) -> Void)?
+    /// The sentenceID currently highlighted across all panes.
+    var highlightedSentenceID: UUID?
+
+    @State private var editingLineID: UUID?
+    @State private var editText: String = ""
+    @FocusState private var isEditing: Bool
 
     var body: some View {
         if lines.isEmpty, let placeholder {
@@ -24,21 +34,8 @@ struct TranscriptPaneView: View {
                                     .padding(.vertical, 4)
                                     .id(line.id)
                             } else {
-                                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                    if showElapsedTime, let elapsed = line.elapsedTime {
-                                        Text(formatElapsedTime(elapsed))
-                                            .font(.system(size: fontSize * 0.75, design: .monospaced))
-                                            .foregroundStyle(.tertiary)
-                                            .frame(minWidth: 40, alignment: .trailing)
-                                    }
-                                    Text(line.text)
-                                        .font(.system(size: fontSize))
-                                        .foregroundStyle(line.isPartial ? .secondary : .primary)
-                                        .italic(line.isPartial)
-                                        .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .id(line.id)
+                                lineRow(line)
+                                    .id(line.id)
                             }
                         }
                     }
@@ -54,6 +51,89 @@ struct TranscriptPaneView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func lineRow(_ line: TranscriptLine) -> some View {
+        let isHighlighted = highlightedSentenceID != nil && line.sentenceID == highlightedSentenceID
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if showElapsedTime, let elapsed = line.elapsedTime {
+                Text(formatElapsedTime(elapsed))
+                    .font(.system(size: fontSize * 0.75, design: .monospaced))
+                    .foregroundStyle(isHighlighted ? .secondary : .tertiary)
+                    .frame(minWidth: 40, alignment: .trailing)
+                    .onTapGesture {
+                        if let sentenceID = line.sentenceID {
+                            onTimestampTapped?(sentenceID)
+                        }
+                    }
+            }
+
+            if isEditable && editingLineID == line.id {
+                TextField("", text: $editText, axis: .vertical)
+                    .font(.system(size: fontSize))
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(Color.accentColor.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .focused($isEditing)
+                    .onSubmit {
+                        commitEdit(for: line)
+                    }
+                    .onExitCommand {
+                        cancelEdit()
+                    }
+                    .onChange(of: isEditing) { _, focused in
+                        if !focused {
+                            commitEdit(for: line)
+                        }
+                    }
+                    .task {
+                        isEditing = true
+                    }
+            } else if isEditable && !line.isPartial && !line.isSeparator {
+                Text(line.text)
+                    .font(.system(size: fontSize))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onTapGesture(count: 2) {
+                        startEditing(line)
+                    }
+            } else {
+                Text(line.text)
+                    .font(.system(size: fontSize))
+                    .foregroundStyle(line.isPartial ? .secondary : .primary)
+                    .italic(line.isPartial)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 1)
+        .background(isHighlighted ? Color.accentColor.opacity(0.15) : .clear)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    private func startEditing(_ line: TranscriptLine) {
+        editText = line.text
+        editingLineID = line.id
+    }
+
+    private func commitEdit(for line: TranscriptLine) {
+        guard editingLineID == line.id else { return }
+        let trimmed = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && trimmed != line.text {
+            onLineEdited?(line.id, trimmed)
+        }
+        editingLineID = nil
+        editText = ""
+    }
+
+    private func cancelEdit() {
+        editingLineID = nil
+        editText = ""
     }
 
     /// Formats elapsed seconds as MM:SS (e.g., "03:45").
