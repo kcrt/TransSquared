@@ -251,7 +251,7 @@ extension ContentView {
     }
 
     private var shouldBlinkRecordIcon: Bool {
-        viewModel.isSessionActive && viewModel.sessionMode == .recordAndTranscribe
+        viewModel.isSessionActive
     }
 
     // MARK: - Toolbar Helpers

@@ -48,12 +48,12 @@ final class SessionViewModel {
 
     /// The active recording service (non-nil only while recording in `.recordAndTranscribe` mode).
     var recordingService: AudioRecordingService?
-    /// URL of the current/most-recent recording file. Available for playback after recording stops.
-    var currentRecordingURL: URL?
-    /// The cumulative elapsed time offset when recording started, used to map entry timestamps to audio time.
-    var recordingStartElapsedOffset: TimeInterval = 0
-    /// Whether a recording file exists for the current session (enables playback UI).
-    var hasRecording: Bool { currentRecordingURL != nil }
+    /// All recording segments captured during this session (one per start/stop cycle).
+    var recordingSegments: [RecordingSegment] = []
+    /// URL of the most-recent recording file (convenience for export).
+    var currentRecordingURL: URL? { recordingSegments.last?.url }
+    /// Whether any recording file exists (enables playback UI).
+    var hasRecording: Bool { !recordingSegments.isEmpty }
 
     /// Pending mode switch awaiting user confirmation (non-nil when confirmation alert is shown).
     var pendingModeSwitch: SessionMode?
@@ -64,6 +64,8 @@ final class SessionViewModel {
 
     /// Playback service for replaying recorded audio at specific timestamps.
     var playbackService: AudioPlaybackService?
+    /// URL currently loaded in the playback service (to detect when a reload is needed).
+    var loadedPlaybackURL: URL?
 
     var fontSize: CGFloat = 16
     var isAlwaysOnTop = false
@@ -398,8 +400,9 @@ final class SessionViewModel {
                     let recorder = AudioRecordingService()
                     let url = try recorder.startRecording()
                     self.recordingService = recorder
-                    self.currentRecordingURL = url
-                    self.recordingStartElapsedOffset = accumulatedElapsedTime
+                    self.recordingSegments.append(
+                        RecordingSegment(url: url, elapsedTimeOffset: accumulatedElapsedTime)
+                    )
                     writerInput = recorder.audioWriterInput
                     writer = recorder.assetWriter
                     logger.info("Audio recording started: \(url.lastPathComponent)")
@@ -494,7 +497,7 @@ final class SessionViewModel {
     func setSessionMode(_ mode: SessionMode) {
         guard mode != sessionMode else { return }
         guard !isSessionActive else { return }
-        if currentRecordingURL != nil {
+        if hasRecording {
             pendingModeSwitch = mode
             showModeSwitchConfirmation = true
             return
@@ -514,15 +517,19 @@ final class SessionViewModel {
 
     /// Plays recorded audio from the given elapsed time.
     func playFromTimestamp(_ elapsedTime: TimeInterval, entryID: UUID) {
-        guard let url = currentRecordingURL else { return }
+        // Find the recording segment that contains this entry's elapsed time
+        guard let segment = recordingSegments.last(where: { $0.elapsedTimeOffset <= elapsedTime }) else { return }
 
-        if playbackService == nil {
+        // Load the correct audio file if needed (different segment or first play)
+        if playbackService == nil || loadedPlaybackURL != segment.url {
+            playbackService?.cleanup()
             playbackService = AudioPlaybackService()
-            playbackService?.loadAudio(url: url)
+            playbackService?.loadAudio(url: segment.url)
+            loadedPlaybackURL = segment.url
         }
 
         // Convert entry elapsed time to audio file position
-        let audioTime = elapsedTime - recordingStartElapsedOffset
+        let audioTime = elapsedTime - segment.elapsedTimeOffset
         guard audioTime >= 0 else { return }
 
         // Look up the entry's duration for auto-stop
@@ -536,13 +543,16 @@ final class SessionViewModel {
         }
     }
 
-    /// Cleans up recording file and playback state.
+    /// Cleans up all recording files and playback state.
     func cleanupRecording() {
         playbackService?.cleanup()
         playbackService = nil
-        recordingService?.cleanup()
+        loadedPlaybackURL = nil
+        for segment in recordingSegments {
+            try? FileManager.default.removeItem(at: segment.url)
+        }
+        recordingSegments = []
         recordingService = nil
-        currentRecordingURL = nil
         cleanupFileTranscriptionSource()
     }
 

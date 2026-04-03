@@ -55,10 +55,11 @@ extension SessionViewModel {
         accumulatedElapsedTime = 0
         sessionStartDate = Date()
 
-        // Clean up any previous playback state and keep the file URL for post-transcription playback.
+        // Clean up any previous playback state.
         playbackService?.cleanup()
         playbackService = nil
-        recordingStartElapsedOffset = 0
+        loadedPlaybackURL = nil
+        recordingSegments = []
 
         // Set up translation slots so committed sentences get translated.
         let slotCount = targetCount
@@ -132,7 +133,7 @@ extension SessionViewModel {
                 }
 
                 // Keep the file URL and security-scoped access alive for playback.
-                currentRecordingURL = url
+                recordingSegments = [RecordingSegment(url: url, elapsedTimeOffset: 0)]
                 fileTranscriptionSourceURL = url
                 keepAccess = didStartAccess
                 logger.info("File transcription completed")

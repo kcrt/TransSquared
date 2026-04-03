@@ -183,6 +183,15 @@ extension Array where Element == TranscriptLine {
     }
 }
 
+/// A recording segment linking a temporary audio file to the elapsed-time timeline.
+struct RecordingSegment {
+    /// URL of the recorded m4a file.
+    let url: URL
+    /// The cumulative elapsed time at which this recording started.
+    /// Used to convert entry `elapsedTime` values into audio-file-relative positions.
+    let elapsedTimeOffset: TimeInterval
+}
+
 /// Controls whether the session records audio alongside transcription.
 enum SessionMode: String, CaseIterable {
     /// Transcribe speech without recording audio.
