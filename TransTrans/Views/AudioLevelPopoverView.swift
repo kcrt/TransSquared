@@ -77,7 +77,7 @@ struct AudioLevelPopoverView: View {
                         let rect = CGRect(x: x, y: y, width: barWidth, height: barHeight)
                         context.fill(
                             Path(roundedRect: rect, cornerRadius: 1),
-                            with: .color(barColor(level: level))
+                            with: .color(audioLevelColor(level: level, isActive: isActive))
                         )
                     }
                 }
@@ -158,15 +158,7 @@ struct AudioLevelPopoverView: View {
         }
     }
 
-    // MARK: - Bar Color (matching AudioWaveformView)
 
-    private func barColor(level: Float) -> Color {
-        if !isActive { return .secondary }
-        if level > 0.92 { return .red }
-        if level > 0.78 { return .orange }
-        if level > 0.2 { return .green }
-        return .gray
-    }
 }
 #Preview {
     AudioLevelPopoverView(

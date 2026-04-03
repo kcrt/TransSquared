@@ -165,6 +165,18 @@ func copyToClipboard(_ string: String?) {
     NSPasteboard.general.setString(string, forType: .string)
 }
 
+// MARK: - Audio Level Color
+
+/// Returns a color for the given normalized audio level (0.0–1.0).
+/// Shared by `AudioWaveformView` and `AudioLevelPopoverView`.
+func audioLevelColor(level: Float, isActive: Bool) -> Color {
+    if !isActive { return .secondary }
+    if level > 0.92 { return .red }
+    if level > 0.78 { return .orange }
+    if level > 0.2 { return .green }
+    return .gray   // below silence threshold (~-40 dB)
+}
+
 // MARK: - Audio Waveform Visualization
 
 struct AudioWaveformView: View {
@@ -178,19 +190,11 @@ struct AudioWaveformView: View {
             ForEach(levels.indices, id: \.self) { index in
                 let level = CGFloat(levels[index])
                 RoundedRectangle(cornerRadius: 0.5)
-                    .fill(barColor(level: level))
+                    .fill(audioLevelColor(level: levels[index], isActive: isActive))
                     .frame(width: 1, height: max(2, level * 28))
             }
         }
         .opacity(isActive ? 1.0 : 0.3)
         .animation(.easeOut(duration: 0.08), value: levels)
-    }
-
-    private func barColor(level: CGFloat) -> Color {
-        if !isActive { return .secondary }
-        if level > 0.92 { return .red }
-        if level > 0.78 { return .orange }
-        if level > 0.2 { return .green }
-        return .gray   // below silence threshold (~-40 dB)
     }
 }
