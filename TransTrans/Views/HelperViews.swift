@@ -18,6 +18,29 @@ struct SaveTranscriptMenuItems: View {
         Button("Both (Interleaved)") {
             viewModel.saveTranscript(contentType: .both)
         }
+        Divider()
+        Menu("Subtitle (.srt)") {
+            Button("Original") {
+                viewModel.exportSubtitle(format: .srt, contentType: .original)
+            }
+            Button("Translation") {
+                viewModel.exportSubtitle(format: .srt, contentType: .translation)
+            }
+            Button("Both") {
+                viewModel.exportSubtitle(format: .srt, contentType: .both)
+            }
+        }
+        Menu("Subtitle (.vtt)") {
+            Button("Original") {
+                viewModel.exportSubtitle(format: .vtt, contentType: .original)
+            }
+            Button("Translation") {
+                viewModel.exportSubtitle(format: .vtt, contentType: .translation)
+            }
+            Button("Both") {
+                viewModel.exportSubtitle(format: .vtt, contentType: .both)
+            }
+        }
         if viewModel.hasRecording {
             Divider()
             Button("Audio Recording (.m4a)") {

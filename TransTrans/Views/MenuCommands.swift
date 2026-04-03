@@ -41,6 +41,34 @@ struct AppMenuCommands: Commands {
             }
             .keyboardShortcut("s")
             .disabled(viewModel?.hasTranscriptContent != true)
+
+            Divider()
+
+            Menu("Save Subtitle (.srt)") {
+                Button("Original...") {
+                    viewModel?.exportSubtitle(format: .srt, contentType: .original)
+                }
+                Button("Translation...") {
+                    viewModel?.exportSubtitle(format: .srt, contentType: .translation)
+                }
+                Button("Both...") {
+                    viewModel?.exportSubtitle(format: .srt, contentType: .both)
+                }
+            }
+            .disabled(viewModel?.hasTranscriptContent != true)
+
+            Menu("Save Subtitle (.vtt)") {
+                Button("Original...") {
+                    viewModel?.exportSubtitle(format: .vtt, contentType: .original)
+                }
+                Button("Translation...") {
+                    viewModel?.exportSubtitle(format: .vtt, contentType: .translation)
+                }
+                Button("Both...") {
+                    viewModel?.exportSubtitle(format: .vtt, contentType: .both)
+                }
+            }
+            .disabled(viewModel?.hasTranscriptContent != true)
         }
 
         // Edit menu: Copy and Clear

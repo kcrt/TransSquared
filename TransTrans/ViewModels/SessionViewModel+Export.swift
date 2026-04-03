@@ -133,4 +133,162 @@ extension SessionViewModel {
         }
         return result.joined(separator: "\n")
     }
+
+    // MARK: - Subtitle Export
+
+    enum SubtitleFormat {
+        case srt
+        case vtt
+
+        var fileExtension: String {
+            switch self {
+            case .srt: return "srt"
+            case .vtt: return "vtt"
+            }
+        }
+
+        var contentType: UTType {
+            switch self {
+            case .srt: return UTType(filenameExtension: "srt") ?? .plainText
+            case .vtt: return UTType(filenameExtension: "vtt") ?? .plainText
+            }
+        }
+    }
+
+    /// Presents a save panel for exporting a subtitle file.
+    func exportSubtitle(format: SubtitleFormat, contentType: SaveContentType) {
+        let content: String
+        switch format {
+        case .srt:
+            content = generateSRT(contentType: contentType)
+        case .vtt:
+            content = generateVTT(contentType: contentType)
+        }
+
+        guard !content.isEmpty else { return }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [format.contentType]
+        panel.nameFieldStringValue = defaultSubtitleFileName(format: format, contentType: contentType)
+        panel.begin { response in
+            guard response == .OK, let destURL = panel.url else { return }
+            do {
+                try content.write(to: destURL, atomically: true, encoding: .utf8)
+                logger.info("Subtitle exported to \(destURL.path)")
+            } catch {
+                logger.error("Failed to export subtitle: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func defaultSubtitleFileName(format: SubtitleFormat, contentType: SaveContentType) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timestamp = formatter.string(from: Date())
+        let suffix: String
+        switch contentType {
+        case .original: suffix = "original"
+        case .translation: suffix = "translation"
+        case .both: suffix = "bilingual"
+        }
+        return "TransTrans_\(timestamp)_\(suffix).\(format.fileExtension)"
+    }
+
+    // MARK: - SRT Generation
+
+    private func generateSRT(contentType: SaveContentType) -> String {
+        let cues = subtitleCues(contentType: contentType)
+        guard !cues.isEmpty else { return "" }
+
+        var result: [String] = []
+        for (index, cue) in cues.enumerated() {
+            result.append("\(index + 1)")
+            result.append("\(formatSRTTimestamp(cue.startTime)) --> \(formatSRTTimestamp(cue.endTime))")
+            result.append(cue.text)
+            result.append("")
+        }
+        return result.joined(separator: "\n")
+    }
+
+    // MARK: - VTT Generation
+
+    private func generateVTT(contentType: SaveContentType) -> String {
+        let cues = subtitleCues(contentType: contentType)
+        guard !cues.isEmpty else { return "" }
+
+        var result: [String] = ["WEBVTT", ""]
+        for (index, cue) in cues.enumerated() {
+            result.append("\(index + 1)")
+            result.append("\(formatVTTTimestamp(cue.startTime)) --> \(formatVTTTimestamp(cue.endTime))")
+            result.append(cue.text)
+            result.append("")
+        }
+        return result.joined(separator: "\n")
+    }
+
+    // MARK: - Subtitle Helpers
+
+    private struct SubtitleCue {
+        let startTime: TimeInterval
+        let endTime: TimeInterval
+        let text: String
+    }
+
+    /// Builds subtitle cues from transcript entries that have timing data.
+    private func subtitleCues(contentType: SaveContentType) -> [SubtitleCue] {
+        let slotCount = min(targetCount, translationSlots.count)
+
+        return entries.compactMap { entry -> SubtitleCue? in
+            guard !entry.isSeparator,
+                  !entry.source.text.isEmpty,
+                  let startTime = entry.elapsedTime else { return nil }
+
+            let endTime = startTime + (entry.duration ?? 3.0)
+
+            let text: String
+            switch contentType {
+            case .original:
+                text = entry.source.text
+            case .translation:
+                let translationLines = (0..<slotCount).compactMap { slot -> String? in
+                    guard let trans = entry.translations[slot], !trans.isPartial else { return nil }
+                    return trans.text
+                }
+                guard !translationLines.isEmpty else { return nil }
+                text = translationLines.joined(separator: "\n")
+            case .both:
+                var lines = [entry.source.text]
+                for slot in 0..<slotCount {
+                    if let trans = entry.translations[slot], !trans.isPartial {
+                        lines.append(trans.text)
+                    }
+                }
+                text = lines.joined(separator: "\n")
+            }
+
+            return SubtitleCue(startTime: startTime, endTime: endTime, text: text)
+        }
+    }
+
+    /// Formats a time interval as SRT timestamp: `HH:MM:SS,mmm`
+    private func formatSRTTimestamp(_ seconds: TimeInterval) -> String {
+        let totalMs = Int(seconds * 1000)
+        let ms = totalMs % 1000
+        let totalSec = totalMs / 1000
+        let s = totalSec % 60
+        let m = (totalSec / 60) % 60
+        let h = totalSec / 3600
+        return String(format: "%02d:%02d:%02d,%03d", h, m, s, ms)
+    }
+
+    /// Formats a time interval as VTT timestamp: `HH:MM:SS.mmm`
+    private func formatVTTTimestamp(_ seconds: TimeInterval) -> String {
+        let totalMs = Int(seconds * 1000)
+        let ms = totalMs % 1000
+        let totalSec = totalMs / 1000
+        let s = totalSec % 60
+        let m = (totalSec / 60) % 60
+        let h = totalSec / 3600
+        return String(format: "%02d:%02d:%02d.%03d", h, m, s, ms)
+    }
 }
