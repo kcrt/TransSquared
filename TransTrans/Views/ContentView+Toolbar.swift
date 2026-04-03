@@ -21,33 +21,27 @@ extension ContentView {
                 Button {
                     viewModel.setSessionMode(.transcribeOnly)
                 } label: {
-                    Label {
-                        Text("音声認識", comment: "Transcribe-only session mode")
-                    } icon: {
-                        if viewModel.sessionMode == .transcribeOnly {
-                            Image(systemName: "checkmark")
-                        }
-                    }
+                    CheckmarkLabel(
+                        title: String(localized: "音声認識", comment: "Transcribe-only session mode"),
+                        isSelected: viewModel.sessionMode == .transcribeOnly
+                    )
                 }
                 Button {
                     viewModel.setSessionMode(.recordAndTranscribe)
                 } label: {
-                    Label {
-                        Text("録音しながら音声認識", comment: "Record + transcribe session mode")
-                    } icon: {
-                        if viewModel.sessionMode == .recordAndTranscribe {
-                            Image(systemName: "checkmark")
-                        }
-                    }
+                    CheckmarkLabel(
+                        title: String(localized: "録音しながら音声認識", comment: "Record + transcribe session mode"),
+                        isSelected: viewModel.sessionMode == .recordAndTranscribe
+                    )
                 }
             } label: {
-                Image(systemName: sessionButtonIcon)
-                    .foregroundStyle(.red)
+                Image(nsImage: Self.redSymbol(named: sessionButtonIcon))
                     .symbolEffect(.pulse, options: .repeating, isActive: shouldBlinkRecordIcon)
             } primaryAction: {
                 viewModel.toggleSession()
             }
             .menuIndicator(.visible)
+            .id(viewModel.sessionMode)
             .help(viewModel.isSessionActive ? "Stop (⌘R)" : "Start (⌘R)")
 
             Menu {
@@ -252,6 +246,16 @@ extension ContentView {
 
     private var shouldBlinkRecordIcon: Bool {
         viewModel.isSessionActive
+    }
+
+    /// Creates an SF Symbol NSImage tinted red with `isTemplate = false`
+    /// so that macOS toolbar styling does not override the color.
+    private static func redSymbol(named name: String) -> NSImage {
+        let base = NSImage(systemSymbolName: name, accessibilityDescription: nil)!
+        let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+        let colored = base.withSymbolConfiguration(config)!
+        colored.isTemplate = false
+        return colored
     }
 
     // MARK: - Toolbar Helpers
