@@ -141,6 +141,9 @@ extension SessionViewModel {
         let entryID = entries[idx].id
         let elapsed = entries[idx].elapsedTime
 
+        // Remove queued partial translations for this entry — they are superseded by the final request.
+        translationSlots[slot].queue.removeAll { $0.isPartial && $0.entryID == entryID }
+
         // Create or reuse translation placeholder (may already exist from partial)
         if let existing = entries[idx].translations[slot], existing.isPartial {
             // Keep existing partial text visible until the final translation arrives
