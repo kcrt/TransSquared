@@ -16,6 +16,9 @@ final class SubtitleWindowController {
 
     nonisolated deinit {
         updateTimer?.invalidate()
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
     }
 
     func show(viewModel: SessionViewModel) {

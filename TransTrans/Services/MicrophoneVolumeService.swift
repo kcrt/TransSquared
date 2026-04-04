@@ -59,18 +59,20 @@ struct MicrophoneVolumeService {
     private func audioDeviceID(forUID uid: String) -> AudioDeviceID? {
         var deviceID = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var uid: CFString = uid as CFString
+        let cfUID: CFString = uid as CFString
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            UInt32(MemoryLayout<CFString>.size), &uid,
-            &size, &deviceID
-        )
+        let status = withUnsafePointer(to: cfUID) { uidPointer in
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                UInt32(MemoryLayout<CFString>.size), uidPointer,
+                &size, &deviceID
+            )
+        }
         guard status == noErr, deviceID != kAudioObjectUnknown else {
             logger.warning("Failed to translate UID to device: \(status)")
             return nil

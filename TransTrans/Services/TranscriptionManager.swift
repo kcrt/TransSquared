@@ -131,7 +131,7 @@ actor TranscriptionManager {
                 for try await result in capturedTranscriber.results {
                     resultCount += 1
                     let text = String(result.text.characters)
-                    let timeInfo = AudioTimeInfo.from(result.text)
+                    let timeInfo = await AudioTimeInfo.from(result.text)
                     if result.isFinal {
                         logger.debug("Final result #\(resultCount): \"\(text, privacy: .private)\" (duration: \(timeInfo.map { String(format: "%.2fs", $0.duration) } ?? "nil"))")
                         capturedContinuation.yield(.finalized(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))
