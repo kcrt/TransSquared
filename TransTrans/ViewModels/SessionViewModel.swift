@@ -456,6 +456,8 @@ final class SessionViewModel {
             } catch {
                 logger.error("Session error: \(error.localizedDescription)")
                 errorMessage = error.localizedDescription
+                recordingService?.cleanup()
+                recordingService = nil
                 isSessionActive = false
             }
         }

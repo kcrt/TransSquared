@@ -90,38 +90,28 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
             logger.warning("Sample buffer has no format description")
             return false
         }
-        guard let basicDesc = formatDesc.audioStreamBasicDescription else {
-            logger.warning("Cannot read ASBD from format description")
-            return false
-        }
 
-        // Build a non-interleaved Float32 format using the detected sample rate
-        // and channel count. AVCaptureAudioDataOutput on macOS delivers
-        // non-interleaved Float32 at the system sample rate.
-        guard let srcFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: basicDesc.mSampleRate,
-            channels: basicDesc.mChannelsPerFrame,
-            interleaved: false
-        ) else {
-            logger.error("Failed to create source AVAudioFormat")
-            return false
-        }
+        // Create AVAudioFormat directly from the format description so the
+        // actual sample format (Float32, Int16, etc.) and layout (interleaved
+        // vs non-interleaved) are respected. Some devices (e.g. Razer Seiren
+        // Mini) deliver Int16 instead of Float32.
+        let srcFormat = AVAudioFormat(cmAudioFormatDescription: formatDesc)
         self.sourceFormat = srcFormat
 
         let formatMatch = srcFormat.sampleRate == targetFormat.sampleRate
             && srcFormat.channelCount == targetFormat.channelCount
             && srcFormat.commonFormat == targetFormat.commonFormat
+            && srcFormat.isInterleaved == targetFormat.isInterleaved
         self.needsConversion = !formatMatch
 
         if needsConversion {
             self.conversionRatio = targetFormat.sampleRate / srcFormat.sampleRate
             guard let conv = AVAudioConverter(from: srcFormat, to: targetFormat) else {
-                logger.error("Failed to create AVAudioConverter: \(srcFormat.sampleRate) Hz → \(self.targetFormat.sampleRate) Hz")
+                logger.error("Failed to create AVAudioConverter: \(srcFormat) → \(self.targetFormat)")
                 return false
             }
             self.converter = conv
-            logger.info("Audio pipeline: \(srcFormat.sampleRate) Hz \(srcFormat.channelCount)ch → \(self.targetFormat.sampleRate) Hz \(self.targetFormat.channelCount)ch")
+            logger.info("Audio pipeline: \(srcFormat.sampleRate) Hz \(srcFormat.channelCount)ch \(srcFormat.commonFormat.rawValue) interleaved=\(srcFormat.isInterleaved) → \(self.targetFormat.sampleRate) Hz \(self.targetFormat.channelCount)ch")
         } else {
             logger.info("Audio pipeline: source matches target (\(srcFormat.sampleRate) Hz \(srcFormat.channelCount)ch)")
         }

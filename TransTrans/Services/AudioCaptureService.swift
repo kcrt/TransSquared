@@ -20,7 +20,7 @@ final class AudioCaptureService {
     private var levelContinuation: AsyncStream<Float>.Continuation?
     private(set) var audioLevelStream: AsyncStream<Float>?
 
-    func startCapture(audioFormat: AVAudioFormat, device: AVCaptureDevice? = nil, recordingService: AudioRecordingService? = nil) throws -> AsyncStream<AnalyzerInput> {
+    func startCapture(audioFormat: AVAudioFormat, device: AVCaptureDevice? = nil, recordingService: AudioRecordingService? = nil) async throws -> AsyncStream<AnalyzerInput> {
         guard !isCapturing else {
             logger.error("startCapture called while already capturing")
             throw TransTransError.alreadyCapturing
@@ -52,7 +52,18 @@ final class AudioCaptureService {
             throw TransTransError.microphoneUnavailable
         }
         session.addOutput(audioOutput)
-        logger.debug("Added audio data output to session")
+
+        // Request Float32 non-interleaved output regardless of device native
+        // format. Some devices (e.g. Razer Seiren Mini) deliver Int16, which
+        // causes copyPCMData failures with AVAudioPCMBuffer. Letting the
+        // system handle the conversion ensures consistent sample buffers.
+        audioOutput.audioSettings = [
+            AVFormatIDKey: Int(kAudioFormatLinearPCM),
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsNonInterleaved: true,
+        ]
+        logger.debug("Added audio data output to session (Float32 non-interleaved)")
 
         session.commitConfiguration()
         logger.debug("Session configuration committed")
@@ -86,10 +97,19 @@ final class AudioCaptureService {
         self.isCapturing = true
 
         // Start the session on a background queue (startRunning is blocking)
+        // and wait for it to actually start before returning.
         logger.info("Starting AVCaptureSession...")
-        captureQueue.async {
-            session.startRunning()
-            logger.info("AVCaptureSession is now running: \(session.isRunning)")
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            captureQueue.async {
+                session.startRunning()
+                if session.isRunning {
+                    logger.info("AVCaptureSession is now running")
+                    continuation.resume()
+                } else {
+                    logger.error("AVCaptureSession failed to start running")
+                    continuation.resume(throwing: TransTransError.microphoneUnavailable)
+                }
+            }
         }
 
         return stream
