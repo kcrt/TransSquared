@@ -80,18 +80,12 @@ actor TranscriptionManager {
         // Create capture service (MainActor-isolated)
         let captureService = await AudioCaptureService()
 
-        // Get the hardware format from the capture service to inform format selection
-        let hardwareFormat = await captureService.hardwareInputFormat(device: audioDevice)
-        if let hwf = hardwareFormat {
-            logger.info("Hardware format: \(hwf.sampleRate) Hz, \(hwf.channelCount) ch")
-        } else {
-            logger.warning("No hardware format available (nil)")
-        }
-
-        // Determine the best audio format, considering the hardware's native format
+        // Let SpeechAnalyzer choose the best format without hardware hints.
+        // AVCaptureAudioDataOutput resamples to a system rate (typically 48 kHz)
+        // regardless of the device's native format, so device.formats is unreliable
+        // for this purpose. AVAudioConverter handles any rate mismatch.
         guard let audioFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
-            compatibleWith: [newTranscriber],
-            considering: hardwareFormat
+            compatibleWith: [newTranscriber]
         ) else {
             logger.error("No compatible audio format found for transcriber")
             throw TransTransError.audioFormatUnavailable

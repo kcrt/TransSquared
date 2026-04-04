@@ -20,34 +20,6 @@ final class AudioCaptureService {
     private var levelContinuation: AsyncStream<Float>.Continuation?
     private(set) var audioLevelStream: AsyncStream<Float>?
 
-    /// Returns the hardware audio format from the specified (or default) capture device.
-    func hardwareInputFormat(device: AVCaptureDevice? = nil) -> AVAudioFormat? {
-        guard let device = device ?? AVCaptureDevice.default(for: .audio) else {
-            logger.warning("No default audio capture device found")
-            return nil
-        }
-        logger.debug("Audio device: \(device.localizedName)")
-
-        let descriptions = device.formats.compactMap { $0.formatDescription }
-        guard let first = descriptions.first else {
-            logger.warning("Audio device has no format descriptions")
-            return nil
-        }
-        guard let basicDesc = first.audioStreamBasicDescription, basicDesc.mSampleRate > 0, basicDesc.mChannelsPerFrame > 0 else {
-            logger.warning("Audio device format has invalid sample rate or channel count")
-            return nil
-        }
-
-        let format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: basicDesc.mSampleRate,
-            channels: basicDesc.mChannelsPerFrame,
-            interleaved: false
-        )
-        logger.info("Hardware input format: \(basicDesc.mSampleRate) Hz, \(basicDesc.mChannelsPerFrame) ch")
-        return format
-    }
-
     func startCapture(audioFormat: AVAudioFormat, device: AVCaptureDevice? = nil, recordingWriter: AVAssetWriter? = nil) throws -> AsyncStream<AnalyzerInput> {
         guard !isCapturing else {
             logger.error("startCapture called while already capturing")
