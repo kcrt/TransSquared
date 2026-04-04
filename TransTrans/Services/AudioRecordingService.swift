@@ -18,8 +18,11 @@ final class AudioRecordingService {
     private(set) var recordingURL: URL?
 
     /// Starts recording to a new temporary m4a file.
+    /// - Parameter sourceFormatHint: The audio format of the incoming sample buffers
+    ///   (typically the hardware capture format). Providing this allows AVAssetWriter
+    ///   to correctly resample/downmix from arbitrary microphone formats.
     /// - Returns: The URL of the temporary file being written.
-    func startRecording() throws -> URL {
+    func startRecording(sourceFormatHint: CMFormatDescription? = nil) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("m4a")
@@ -30,7 +33,7 @@ final class AudioRecordingService {
             AVNumberOfChannelsKey: 1,
             AVSampleRateKey: 48000.0,
             AVEncoderBitRateKey: 128_000
-        ])
+        ], sourceFormatHint: sourceFormatHint)
         input.expectsMediaDataInRealTime = true
         writer.add(input)
 

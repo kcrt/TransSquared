@@ -410,7 +410,9 @@ final class SessionViewModel {
             do {
                 // Start recording alongside transcription
                 let recorder = AudioRecordingService()
-                let url = try recorder.startRecording()
+                let audioDevice = selectedMicrophone ?? AVCaptureDevice.default(for: .audio)
+                let sourceFormatHint = audioDevice?.formats.first?.formatDescription
+                let url = try recorder.startRecording(sourceFormatHint: sourceFormatHint)
                 self.recordingService = recorder
                 self.recordingSegments.append(
                     RecordingSegment(url: url, elapsedTimeOffset: accumulatedElapsedTime)
