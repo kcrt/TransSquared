@@ -186,16 +186,23 @@ final class SessionViewModel {
 
     // MARK: - Target Language Count
 
-    /// Maximum number of target languages.
-    static let maxTargetCount = 3
+    /// Maximum number of target languages (derived from the canonical slot count).
+    static let maxTargetCount = TranscriptEntry.maxTranslationSlots
 
     /// Number of active target panes (1, 2, or 3).
     var targetCount: Int = 1 {
         didSet { defaults.set(targetCount, forKey: "targetCount") }
     }
 
-    /// Target language identifiers for all slots (always 3 elements; only first `targetCount` are active).
-    var targetLanguageIdentifiers: [String] = ["en", "zh-Hans", "ko"] {
+    /// Default target language identifiers used when no persisted value exists.
+    /// The array is padded to `maxTargetCount` by cycling through the defaults.
+    private static let defaultTargetLanguages = ["en", "zh-Hans", "ko"]
+    private static var initialTargetLanguageIdentifiers: [String] {
+        (0..<maxTargetCount).map { defaultTargetLanguages[$0 % defaultTargetLanguages.count] }
+    }
+
+    /// Target language identifiers for all slots (always `maxTargetCount` elements; only first `targetCount` are active).
+    var targetLanguageIdentifiers: [String] = SessionViewModel.initialTargetLanguageIdentifiers {
         didSet { defaults.set(targetLanguageIdentifiers, forKey: "targetLanguageIdentifiers") }
     }
 
@@ -687,9 +694,9 @@ final class SessionViewModel {
         self.sourceLocaleIdentifier = defaults.string(forKey: "sourceLocaleIdentifier") ?? "ja_JP"
 
         let storedCount = defaults.integer(forKey: "targetCount")
-        self.targetCount = (1...3).contains(storedCount) ? storedCount : 1
+        self.targetCount = (1...Self.maxTargetCount).contains(storedCount) ? storedCount : 1
 
-        if let stored = defaults.array(forKey: "targetLanguageIdentifiers") as? [String], stored.count >= 3 {
+        if let stored = defaults.array(forKey: "targetLanguageIdentifiers") as? [String], stored.count >= Self.maxTargetCount {
             self.targetLanguageIdentifiers = stored
         }
     }

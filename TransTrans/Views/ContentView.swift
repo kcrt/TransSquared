@@ -181,20 +181,19 @@ struct ContentView: View {
 
 // MARK: - Translation Task Slots (extracted to reduce body complexity for the type-checker)
 
-/// Attaches one `.translationTask` modifier per translation slot (up to 3).
+/// Attaches one `.translationTask` modifier per translation slot, driven by `maxTranslationSlots`.
 private struct TranslationTaskSlots: ViewModifier {
     var viewModel: SessionViewModel
 
     func body(content: Content) -> some View {
         content
-            .translationTask(slotConfig(0)) { session in
-                await viewModel.handleTranslationSession(session, slot: 0)
-            }
-            .translationTask(slotConfig(1)) { session in
-                await viewModel.handleTranslationSession(session, slot: 1)
-            }
-            .translationTask(slotConfig(2)) { session in
-                await viewModel.handleTranslationSession(session, slot: 2)
+            .background {
+                ForEach(0..<TranscriptEntry.maxTranslationSlots, id: \.self) { slot in
+                    Color.clear
+                        .translationTask(slotConfig(slot)) { session in
+                            await viewModel.handleTranslationSession(session, slot: slot)
+                        }
+                }
             }
     }
 

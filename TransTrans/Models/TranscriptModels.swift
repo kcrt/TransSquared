@@ -71,7 +71,7 @@ struct TranscriptEntry: Identifiable, Sendable {
     var isCommitted: Bool
 
     /// Maximum number of target language slots.
-    static let maxTranslationSlots = 3
+    static let maxTranslationSlots = 10
 
     init(
         id: UUID = UUID(),
