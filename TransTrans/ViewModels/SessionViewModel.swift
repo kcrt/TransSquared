@@ -410,19 +410,16 @@ final class SessionViewModel {
             do {
                 // Start recording alongside transcription
                 let recorder = AudioRecordingService()
-                let audioDevice = selectedMicrophone ?? AVCaptureDevice.default(for: .audio)
-                let sourceFormatHint = audioDevice?.formats.first?.formatDescription
-                let url = try recorder.startRecording(sourceFormatHint: sourceFormatHint)
+                let url = try recorder.startRecording()
                 self.recordingService = recorder
                 self.recordingSegments.append(
                     RecordingSegment(url: url, elapsedTimeOffset: accumulatedElapsedTime)
                 )
-                let writerInput = recorder.audioWriterInput
                 let writer = recorder.assetWriter
                 logger.info("Audio recording started: \(url.lastPathComponent)")
 
                 logger.info("Starting transcription manager...")
-                let streams = try await transcriptionManager.start(locale: sourceLocale, audioDevice: selectedMicrophone, contextualStrings: currentContextualStrings, recordingInput: writerInput, recordingWriter: writer)
+                let streams = try await transcriptionManager.start(locale: sourceLocale, audioDevice: selectedMicrophone, contextualStrings: currentContextualStrings, recordingWriter: writer)
 
                 // Start consuming audio levels for waveform display + silence-based sentence boundary
                 if let levelStream = streams.audioLevels {

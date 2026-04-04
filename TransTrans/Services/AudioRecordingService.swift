@@ -6,46 +6,42 @@ private let logger = Logger.app("AudioRecording")
 
 /// Records raw audio from the capture pipeline into an AAC-encoded m4a file.
 ///
-/// The service exposes its `AVAssetWriter` and `AVAssetWriterInput` so that
-/// `AudioCaptureDelegate` can append `CMSampleBuffer`s directly from the
-/// capture queue — no cross-actor hop required.
+/// The service creates an `AVAssetWriter` and exposes it so that
+/// `AudioCaptureDelegate` can lazily create the `AVAssetWriterInput` using
+/// the actual `CMSampleBuffer` format description — ensuring the AAC encoder
+/// receives the correct source format hint regardless of microphone hardware.
 final class AudioRecordingService {
-    /// The underlying asset writer (exposed so the delegate can call `startSession`).
+    /// The underlying asset writer (exposed so the delegate can add an input and start a session).
     private(set) var assetWriter: AVAssetWriter?
-    /// The audio writer input (exposed so the delegate can call `append`).
-    private(set) var audioWriterInput: AVAssetWriterInput?
     /// URL of the temporary recording file.
     private(set) var recordingURL: URL?
 
+    /// AAC output settings used when creating the writer input lazily.
+    static let outputSettings: [String: Any] = [
+        AVFormatIDKey: kAudioFormatMPEG4AAC,
+        AVNumberOfChannelsKey: 1,
+        AVSampleRateKey: 48000.0,
+        AVEncoderBitRateKey: 128_000
+    ]
+
     /// Starts recording to a new temporary m4a file.
-    /// - Parameter sourceFormatHint: The audio format of the incoming sample buffers
-    ///   (typically the hardware capture format). Providing this allows AVAssetWriter
-    ///   to correctly resample/downmix from arbitrary microphone formats.
+    ///
+    /// The `AVAssetWriterInput` is **not** created here — it is created lazily
+    /// by `AudioCaptureDelegate` when the first sample buffer arrives, using the
+    /// buffer's `formatDescription` as `sourceFormatHint`.
     /// - Returns: The URL of the temporary file being written.
-    func startRecording(sourceFormatHint: CMFormatDescription? = nil) throws -> URL {
+    func startRecording() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("m4a")
 
         let writer = try AVAssetWriter(outputURL: url, fileType: .m4a)
-        let input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVNumberOfChannelsKey: 1,
-            AVSampleRateKey: 48000.0,
-            AVEncoderBitRateKey: 128_000
-        ], sourceFormatHint: sourceFormatHint)
-        input.expectsMediaDataInRealTime = true
-        writer.add(input)
-
-        guard writer.startWriting() else {
-            logger.error("AVAssetWriter failed to start: \(writer.error?.localizedDescription ?? "unknown")")
-            throw writer.error ?? TransTransError.recordingFailed
-        }
-        // NOTE: startSession(atSourceTime:) is called by AudioCaptureDelegate
-        // when the first sample buffer arrives — this keeps timing accurate.
+        // NOTE: startWriting() and startSession(atSourceTime:) are called by
+        // AudioCaptureDelegate when the first sample buffer arrives — the input
+        // must be added before startWriting(), and we need the buffer's
+        // formatDescription to create the input with the correct sourceFormatHint.
 
         self.assetWriter = writer
-        self.audioWriterInput = input
         self.recordingURL = url
         logger.info("Recording started → \(url.lastPathComponent)")
         return url
@@ -54,11 +50,9 @@ final class AudioRecordingService {
     /// Finalizes the recording and returns the file URL on success, or nil on failure.
     func stopRecording() async -> URL? {
         guard let writer = assetWriter else { return nil }
-        audioWriterInput?.markAsFinished()
         await writer.finishWriting()
         let url = recordingURL
         assetWriter = nil
-        audioWriterInput = nil
         if writer.status == .completed {
             logger.info("Recording finalized successfully")
             return url
@@ -76,6 +70,5 @@ final class AudioRecordingService {
         }
         recordingURL = nil
         assetWriter = nil
-        audioWriterInput = nil
     }
 }

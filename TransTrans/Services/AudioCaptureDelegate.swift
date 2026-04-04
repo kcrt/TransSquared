@@ -21,10 +21,12 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
     private var accumulatedFrames: AVAudioFrameCount = 0
 
     // MARK: - Recording support
-    /// Optional writer input for recording raw audio to m4a. Set before capture starts.
-    var recordingInput: AVAssetWriterInput?
-    /// The asset writer owning `recordingInput`. Used to call `startSession(atSourceTime:)` on the first buffer.
+    /// The asset writer for recording. The writer input is created lazily on the
+    /// first sample buffer so that the actual `formatDescription` (not the device's
+    /// hardware format) is used as `sourceFormatHint`.
     var recordingWriter: AVAssetWriter?
+    /// Writer input created lazily from the first buffer's format description.
+    private var recordingInput: AVAssetWriterInput?
     /// Tracks whether `startSession(atSourceTime:)` has been called on the writer.
     private var recordingSessionStarted = false
 
@@ -59,12 +61,28 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
 
         // Forward raw CMSampleBuffer to the recorder (if active).
         // This runs on the serial captureQueue, so AVAssetWriterInput.append is safe.
-        if let recordingInput, let recordingWriter {
-            if !recordingSessionStarted {
+        if let recordingWriter {
+            // Lazily create the writer input using the actual CMSampleBuffer's
+            // formatDescription — this ensures the AAC encoder knows the true
+            // source format (e.g. Float32 vs Int16) regardless of microphone.
+            if recordingInput == nil {
+                let input = AVAssetWriterInput(
+                    mediaType: .audio,
+                    outputSettings: AudioRecordingService.outputSettings,
+                    sourceFormatHint: sampleBuffer.formatDescription
+                )
+                input.expectsMediaDataInRealTime = true
+                recordingWriter.add(input)
+                guard recordingWriter.startWriting() else {
+                    logger.error("AVAssetWriter failed to start: \(recordingWriter.error?.localizedDescription ?? "unknown")")
+                    return
+                }
                 recordingWriter.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
                 recordingSessionStarted = true
+                recordingInput = input
+                logger.info("Created recording writer input with source format: \(String(describing: formatDesc))")
             }
-            if recordingInput.isReadyForMoreMediaData {
+            if let recordingInput, recordingInput.isReadyForMoreMediaData {
                 recordingInput.append(sampleBuffer)
             }
         }
@@ -221,6 +239,12 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
                 newAccumBuf.frameLength = leftover
             }
         }
+    }
+
+    /// Marks the recording writer input as finished so the asset writer can finalize.
+    func finishRecording() {
+        recordingInput?.markAsFinished()
+        recordingInput = nil
     }
 
     /// Flushes any remaining accumulated audio to the analyzer.
