@@ -161,6 +161,12 @@ actor TranscriptionManager {
             do {
                 let endTime = try await capturedAnalyzer.analyzeSequence(audioStream)
                 logger.info("analyzeSequence completed, endTime=\(String(describing: endTime))")
+                // Finalize the last partial result so the transcriber emits
+                // it as a final result before the session ends.
+                if let endTime {
+                    try await capturedAnalyzer.finalizeAndFinish(through: endTime)
+                    logger.info("Analyzer finalized and finished through endTime")
+                }
             } catch {
                 if !Task.isCancelled {
                     logger.error("analyzeSequence error: \(error.localizedDescription)")
@@ -182,23 +188,29 @@ actor TranscriptionManager {
 
         logger.info("Stopping transcription...")
 
-        // Stop audio capture first
+        // Stop audio capture — this finishes the audio stream so
+        // analyzeSequence returns, which triggers finalizeAndFinish
+        // inside analyzeTask to produce the last finalized result.
         await audioCaptureService?.stopCapture()
         audioCaptureService = nil
 
-        // Cancel tasks and await their completion to avoid use-after-free
-        analyzeTask?.cancel()
-        resultTask?.cancel()
+        // Wait for the analysis to complete naturally. Do NOT cancel —
+        // analyzeTask calls finalizeAndFinish after the stream ends,
+        // which ensures the last partial is emitted as a final result.
         let pendingAnalyze = analyzeTask
-        let pendingResult = resultTask
         analyzeTask = nil
-        resultTask = nil
         _ = try? await pendingAnalyze?.value
+
+        // Wait for result consumption to finish. The transcriber's
+        // results stream ends after the analyzer finishes.
+        let pendingResult = resultTask
+        resultTask = nil
         _ = await pendingResult?.value
 
-        // Finish the analyzer
+        // Fallback: ensure the analyzer is finished even if the task
+        // errored before calling finalizeAndFinish.
         if let analyzer {
-            logger.debug("Finishing analyzer...")
+            logger.debug("Finishing analyzer (fallback)...")
             await analyzer.cancelAndFinishNow()
         }
 

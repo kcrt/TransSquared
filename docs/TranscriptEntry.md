@@ -84,6 +84,40 @@ TransString
               └─────────────────────────────┘
 ```
 
+### Session Stop (Graceful Shutdown)
+
+When the user stops recording, the pipeline shuts down gracefully to avoid losing
+the last partial result:
+
+```
+stopSession()
+    │
+    ├── Cancel audioLevelTask / sentenceBoundaryTimer
+    │
+    ├── await transcriptionManager.stop()
+    │     │
+    │     ├── stopCapture()              ← finishes the audio stream
+    │     ├── await analyzeTask          ← analyzeSequence returns, then
+    │     │                                finalizeAndFinish(through: endTime)
+    │     │                                forces the last partial → final
+    │     └── await resultTask           ← consumes the final result and
+    │                                      finishes the event stream
+    │
+    ├── Cancel transcriptionTask         ← safe: event stream already ended
+    │
+    ├── Promote unfinalised partial      ← safety net: if the framework
+    │   (pendingPartial → source.text)     didn't produce a final result,
+    │                                      treat the partial as finalized
+    ├── Flush pendingSentenceBuffer
+    │   → commitSentence()
+    │
+    └── Finalize recording, cleanup
+```
+
+Key point: `transcriptionTask` is **not** cancelled before `transcriptionManager.stop()`
+returns, so it can continue receiving the final events on the MainActor while
+`stopSession()` is suspended.
+
 ### Sentence Boundary Detection
 
 Finalized text accumulates in `pendingSentenceBuffer`. A commit is triggered by either:

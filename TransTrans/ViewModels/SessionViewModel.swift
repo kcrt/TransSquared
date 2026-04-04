@@ -470,12 +470,39 @@ final class SessionViewModel {
 
         logger.info("Stopping session...")
 
-        transcriptionTask?.cancel()
-        transcriptionTask = nil
+        // Cancel audio level task and timers, but keep transcriptionTask
+        // alive so it can receive final events from the transcription manager.
         audioLevelTask?.cancel()
         audioLevelTask = nil
         sentenceBoundaryTimer?.cancel()
         sentenceBoundaryTimer = nil
+
+        // Stop transcription gracefully — this lets the analyzer finalize
+        // its current hypothesis and produce a final result before closing.
+        // While awaiting, transcriptionTask continues processing events on
+        // the MainActor (which is free because we are suspended here).
+        await transcriptionManager.stop()
+
+        // The event stream has ended. Cancel transcriptionTask for cleanup.
+        transcriptionTask?.cancel()
+        transcriptionTask = nil
+
+        // Accumulate elapsed time from this session segment (after final
+        // events are processed so adjustedElapsedTime is correct).
+        if let start = sessionStartDate {
+            accumulatedElapsedTime += Date().timeIntervalSince(start)
+        }
+        sessionStartDate = nil
+
+        // Safety net: if the framework didn't finalize the last partial,
+        // promote it to source text so it isn't lost.
+        if let idx = currentEntryIndex,
+           let partial = entries[idx].pendingPartial, !partial.isEmpty {
+            logger.debug("Promoting unfinalised partial: \"\(partial, privacy: .private)\"")
+            entries[idx].source.text += partial
+            entries[idx].pendingPartial = nil
+            pendingSentenceBuffer += partial
+        }
 
         // Flush any remaining buffer
         if !pendingSentenceBuffer.isEmpty {
@@ -483,15 +510,6 @@ final class SessionViewModel {
             commitSentence(pendingSentenceBuffer)
             pendingSentenceBuffer = ""
         }
-
-        // Accumulate elapsed time from this session segment
-        if let start = sessionStartDate {
-            accumulatedElapsedTime += Date().timeIntervalSince(start)
-        }
-        sessionStartDate = nil
-
-        // Await full teardown so the microphone is released before any restart
-        await transcriptionManager.stop()
 
         // Finalize recording (keep URL for playback)
         if let recorder = recordingService {
