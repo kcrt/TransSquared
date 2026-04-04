@@ -176,9 +176,6 @@ struct TranscriptPaneView: View {
 
     /// Formats elapsed seconds as MM:SS (e.g., "03:45").
     private func formatElapsedTime(_ seconds: TimeInterval) -> String {
-        let totalSeconds = max(0, Int(seconds))
-        let mins = totalSeconds / 60
-        let secs = totalSeconds % 60
-        return String(format: "%02d:%02d", mins, secs)
+        seconds.formattedMMSS
     }
 }

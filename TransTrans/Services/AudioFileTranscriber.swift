@@ -86,7 +86,7 @@ actor AudioFileTranscriber {
                 do {
                     for try await result in transcriber.results {
                         let text = String(result.text.characters)
-                        let timeInfo = extractAudioTimeInfo(from: result.text)
+                        let timeInfo = AudioTimeInfo.from(result.text)
                         if result.isFinal {
                             capturedLogger.info("Final: \"\(text)\" (duration: \(timeInfo.map { String(format: "%.2fs", $0.duration) } ?? "nil"), offset: \(timeInfo.map { String(format: "%.2fs", $0.offset) } ?? "nil"))")
                             continuation.yield(.finalized(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))

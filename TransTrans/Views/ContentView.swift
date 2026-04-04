@@ -50,15 +50,7 @@ struct ContentView: View {
             .sharedBackgroundVisibility(.hidden)
             toolbarContent
         }
-        .translationTask(viewModel.translationSlots.indices.contains(0) ? viewModel.translationSlots[0].config : nil) { session in
-            await viewModel.handleTranslationSession(session, slot: 0)
-        }
-        .translationTask(viewModel.translationSlots.indices.contains(1) ? viewModel.translationSlots[1].config : nil) { session in
-            await viewModel.handleTranslationSession(session, slot: 1)
-        }
-        .translationTask(viewModel.translationSlots.indices.contains(2) ? viewModel.translationSlots[2].config : nil) { session in
-            await viewModel.handleTranslationSession(session, slot: 2)
-        }
+        .modifier(TranslationTaskSlots(viewModel: viewModel))
         .task {
             await viewModel.loadSupportedLocales()
         }
@@ -156,13 +148,13 @@ struct ContentView: View {
     @ViewBuilder
     private var contextMenuItems: some View {
         Button("Copy All (Original)") {
-            copyToClipboard(viewModel.copyAllOriginal())
+            NSPasteboard.general.copyString(viewModel.copyAllOriginal())
         }
         Button("Copy All (Translation)") {
-            copyToClipboard(viewModel.copyAllTranslation())
+            NSPasteboard.general.copyString(viewModel.copyAllTranslation())
         }
         Button("Copy All (Interleaved)") {
-            copyToClipboard(viewModel.copyAllInterleaved())
+            NSPasteboard.general.copyString(viewModel.copyAllInterleaved())
         }
         Divider()
         Menu("Save Transcript") {
@@ -178,12 +170,36 @@ struct ContentView: View {
 
     /// The main application window (excludes subtitle overlay panels).
     private var mainWindow: NSWindow? {
-        NSApplication.shared.windows.first { !($0 is NSPanel) }
+        NSApplication.shared.mainWindow ?? NSApplication.shared.windows.first { !($0 is NSPanel) }
     }
 
     private func setWindowLevel(_ alwaysOnTop: Bool) {
         guard let window = mainWindow else { return }
         window.level = alwaysOnTop ? .floating : .normal
+    }
+}
+
+// MARK: - Translation Task Slots (extracted to reduce body complexity for the type-checker)
+
+/// Attaches one `.translationTask` modifier per translation slot (up to 3).
+private struct TranslationTaskSlots: ViewModifier {
+    var viewModel: SessionViewModel
+
+    func body(content: Content) -> some View {
+        content
+            .translationTask(slotConfig(0)) { session in
+                await viewModel.handleTranslationSession(session, slot: 0)
+            }
+            .translationTask(slotConfig(1)) { session in
+                await viewModel.handleTranslationSession(session, slot: 1)
+            }
+            .translationTask(slotConfig(2)) { session in
+                await viewModel.handleTranslationSession(session, slot: 2)
+            }
+    }
+
+    private func slotConfig(_ slot: Int) -> TranslationSession.Configuration? {
+        viewModel.translationSlots.indices.contains(slot) ? viewModel.translationSlots[slot].config : nil
     }
 }
 
@@ -229,7 +245,7 @@ private struct SheetsAndAlerts: ViewModifier {
             .fileExporter(
                 isPresented: $viewModel.isExporterPresented,
                 item: viewModel.exportContent,
-                contentTypes: [.plainText],
+                contentTypes: viewModel.exportContentTypes,
                 defaultFilename: viewModel.exportDefaultFilename
             ) { result in
                 switch result {

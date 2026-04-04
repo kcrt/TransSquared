@@ -83,13 +83,15 @@ final class AudioCaptureService {
         self.audioLevelStream = levelStream
         self.levelContinuation = levelCont
 
-        // Create delegate that handles sample buffer conversion
+        // Create delegate that handles sample buffer conversion.
+        // recordingService is passed at init to avoid a data race — the
+        // delegate must have its recording service before any callbacks fire.
         let captureDelegate = AudioCaptureDelegate(
             targetFormat: audioFormat,
             continuation: continuation,
-            levelContinuation: levelCont
+            levelContinuation: levelCont,
+            recordingService: recordingService
         )
-        captureDelegate.recordingService = recordingService
         self.delegate = captureDelegate
         audioOutput.setSampleBufferDelegate(captureDelegate, queue: captureQueue)
 
@@ -115,21 +117,28 @@ final class AudioCaptureService {
         return stream
     }
 
-    func stopCapture() {
+    func stopCapture() async {
         guard isCapturing else {
             logger.debug("stopCapture called but not capturing")
             return
         }
 
         logger.info("Stopping audio capture")
+        // stopRunning() is synchronous and guarantees no further captureOutput
+        // callbacks will fire after it returns.
         captureSession?.stopRunning()
         captureSession = nil
 
-        // Flush on the capture queue to avoid racing with captureOutput callbacks
+        // Flush remaining audio on the capture queue. Use async + continuation
+        // instead of sync to avoid a potential deadlock if this method were
+        // ever called from the capture queue.
         let delegateToFlush = delegate
-        captureQueue.sync {
-            delegateToFlush?.finishRecording()
-            delegateToFlush?.flushAccumulationBuffer()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            captureQueue.async {
+                delegateToFlush?.finishRecording()
+                delegateToFlush?.flushAccumulationBuffer()
+                continuation.resume()
+            }
         }
         delegate = nil
 

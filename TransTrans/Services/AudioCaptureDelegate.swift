@@ -13,7 +13,10 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
     let levelContinuation: AsyncStream<Float>.Continuation
 
     // MARK: - Recording (delegated to AudioRecordingService)
-    var recordingService: AudioRecordingService?
+    /// Set once at init and never mutated afterwards. The delegate is
+    /// called from the serial capture queue, so immutability after init
+    /// is sufficient for thread safety.
+    let recordingService: AudioRecordingService?
 
     // MARK: - Pipeline state (initialized on first buffer via setupPipeline)
     private var sourceFormat: AVAudioFormat?
@@ -28,10 +31,11 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
     private var accumulationBuffer: AVAudioPCMBuffer?
     private var accumulatedFrames: AVAudioFrameCount = 0
 
-    init(targetFormat: AVAudioFormat, continuation: AsyncStream<AnalyzerInput>.Continuation, levelContinuation: AsyncStream<Float>.Continuation) {
+    init(targetFormat: AVAudioFormat, continuation: AsyncStream<AnalyzerInput>.Continuation, levelContinuation: AsyncStream<Float>.Continuation, recordingService: AudioRecordingService? = nil) {
         self.targetFormat = targetFormat
         self.continuation = continuation
         self.levelContinuation = levelContinuation
+        self.recordingService = recordingService
         super.init()
     }
 

@@ -10,7 +10,15 @@ private let logger = Logger.app("AudioRecording")
 /// so that the actual `CMFormatDescription` is used as `sourceFormatHint`,
 /// ensuring the AAC encoder receives the correct source format regardless
 /// of microphone hardware.
-final class AudioRecordingService {
+///
+/// **Thread-safety contract:** After `startRecording()` is called on the
+/// creating thread (MainActor), all subsequent mutations — `appendSampleBuffer`,
+/// `finishWriterInput` — MUST be called exclusively from the serial capture
+/// queue (`AudioCaptureService.captureQueue`). `stopRecording()` is called
+/// from the MainActor after the capture queue has finished writing.
+/// This serial access pattern ensures there are no data races despite the
+/// class not using internal locks.
+final class AudioRecordingService: @unchecked Sendable {
     private var assetWriter: AVAssetWriter?
     /// URL of the temporary recording file.
     private(set) var recordingURL: URL?

@@ -2,10 +2,20 @@ import SwiftUI
 import Speech
 import Translation
 import AVFoundation
+import UniformTypeIdentifiers
 import os
 
 private let logger = Logger.app("Session")
 
+/// Central view model that owns all application state for TransTrans.
+///
+/// Responsibilities are split across extensions by domain:
+/// - **Session lifecycle** — `startSession()` / `stopSession()` (this file)
+/// - **Transcription events** — `SessionViewModel+Transcription.swift`
+/// - **Translation pipeline** — `SessionViewModel+Translation.swift`
+/// - **Export & clipboard** — `SessionViewModel+Export.swift`
+/// - **File transcription** — `SessionViewModel+FileTranscription.swift`
+/// - **Permissions & utilities** — `SessionViewModel+Permissions.swift`
 @Observable
 @MainActor
 final class SessionViewModel {
@@ -77,6 +87,7 @@ final class SessionViewModel {
     var isExporterPresented = false
     var exportContent: String?
     var exportDefaultFilename = ""
+    var exportContentTypes: [UTType] = [.plainText]
 
     // MARK: - File Transcription State
     var isTranscribingFile = false
@@ -145,7 +156,13 @@ final class SessionViewModel {
         if start == 0 {
             audioLevels = audioLevelRingBuffer
         } else {
-            audioLevels = Array(audioLevelRingBuffer[start...]) + Array(audioLevelRingBuffer[..<start])
+            // Single allocation instead of two slices + concatenation.
+            audioLevels = Array(unsafeUninitializedCapacity: n) { buffer, count in
+                let tail = n - start
+                for i in 0..<tail { buffer[i] = audioLevelRingBuffer[start + i] }
+                for i in 0..<start { buffer[tail + i] = audioLevelRingBuffer[i] }
+                count = n
+            }
         }
     }
 

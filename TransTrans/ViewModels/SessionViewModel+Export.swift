@@ -31,6 +31,7 @@ extension SessionViewModel {
 
         exportContent = content
         exportDefaultFilename = defaultFileName(for: contentType)
+        exportContentTypes = [.plainText]
         isExporterPresented = true
     }
 
@@ -153,27 +154,16 @@ extension SessionViewModel {
         }
     }
 
-    /// Presents a save panel for exporting a subtitle file.
+    /// Prepares subtitle content for export via SwiftUI's `.fileExporter`.
+    /// The actual file-save dialog is presented by the View layer.
     func exportSubtitle(format: SubtitleFormat, contentType: SaveContentType) {
         let content = generateSubtitleContent(format: format, contentType: contentType)
-
         guard !content.isEmpty else { return }
 
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [format.contentType]
-        panel.nameFieldStringValue = defaultSubtitleFileName(format: format, contentType: contentType)
-        panel.begin { [weak self] response in
-            guard response == .OK, let destURL = panel.url else { return }
-            do {
-                try content.write(to: destURL, atomically: true, encoding: .utf8)
-                logger.info("Subtitle exported to \(destURL.path)")
-            } catch {
-                logger.error("Failed to export subtitle: \(error.localizedDescription)")
-                Task { @MainActor [weak self] in
-                    self?.errorMessage = "Failed to export subtitle: \(error.localizedDescription)"
-                }
-            }
-        }
+        exportContent = content
+        exportDefaultFilename = defaultSubtitleFileName(format: format, contentType: contentType)
+        exportContentTypes = [format.contentType]
+        isExporterPresented = true
     }
 
     private func defaultSubtitleFileName(format: SubtitleFormat, contentType: SaveContentType) -> String {
@@ -205,11 +195,16 @@ extension SessionViewModel {
 
     // MARK: - Filename Helpers
 
-    /// Generates a `yyyyMMdd_HHmmss` timestamp for export filenames.
-    private static func fileTimestamp() -> String {
+    /// Shared formatter for `yyyyMMdd_HHmmss` export filename timestamps.
+    private static let fileTimestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd_HHmmss"
-        return formatter.string(from: Date())
+        return formatter
+    }()
+
+    /// Generates a `yyyyMMdd_HHmmss` timestamp for export filenames.
+    private static func fileTimestamp() -> String {
+        fileTimestampFormatter.string(from: Date())
     }
 
     // MARK: - Subtitle Helpers

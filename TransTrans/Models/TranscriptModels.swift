@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation
 
 /// Describes a missing permission that the user needs to grant in System Settings.
 enum PermissionIssue: Identifiable {
@@ -207,4 +207,20 @@ struct AutoReplacement: Codable, Identifiable, Equatable {
     var id = UUID()
     var from: String
     var to: String
+}
+
+// MARK: - Time Formatting
+
+extension TimeInterval {
+    /// Formats as `MM:SS` with leading zeros (e.g., "03:45"). Used for elapsed-time timestamps.
+    var formattedMMSS: String {
+        let totalSeconds = max(0, Int(self))
+        return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
+    }
+
+    /// Formats as `M:SS` (e.g., "3:45"). Used for progress labels.
+    var formattedMSS: String {
+        let totalSeconds = max(0, Int(self))
+        return String(format: "%d:%02d", totalSeconds / 60, totalSeconds % 60)
+    }
 }

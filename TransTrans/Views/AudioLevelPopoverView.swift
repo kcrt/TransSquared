@@ -85,7 +85,7 @@ struct AudioLevelPopoverView: View {
                         let rect = CGRect(x: x, y: y, width: barWidth, height: barHeight)
                         context.fill(
                             Path(roundedRect: rect, cornerRadius: 1),
-                            with: .color(audioLevelColor(level: level, isActive: isActive))
+                            with: .color(AudioWaveformView.levelColor(level, isActive: isActive))
                         )
                     }
                 }

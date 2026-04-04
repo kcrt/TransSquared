@@ -82,17 +82,17 @@ struct AppMenuCommands: Commands {
         CommandGroup(after: .pasteboard) {
             Section {
                 Button("Copy All (Original)") {
-                    copyToClipboard(viewModel?.copyAllOriginal())
+                    NSPasteboard.general.copyString(viewModel?.copyAllOriginal())
                 }
                 .disabled(viewModel?.hasTranscriptContent != true)
 
                 Button("Copy All (Translation)") {
-                    copyToClipboard(viewModel?.copyAllTranslation())
+                    NSPasteboard.general.copyString(viewModel?.copyAllTranslation())
                 }
                 .disabled(viewModel?.hasTranscriptContent != true)
 
                 Button("Copy All (Interleaved)") {
-                    copyToClipboard(viewModel?.copyAllInterleaved())
+                    NSPasteboard.general.copyString(viewModel?.copyAllInterleaved())
                 }
                 .disabled(viewModel?.hasTranscriptContent != true)
             }

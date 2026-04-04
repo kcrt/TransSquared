@@ -150,31 +150,19 @@ struct FileTranscriptionProgressView: View {
     }
 
     private func formatTime(_ seconds: TimeInterval) -> String {
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", mins, secs)
+        seconds.formattedMSS
     }
 }
 
 // MARK: - Pasteboard Helper
 
-/// Copies a string to the system clipboard.
-func copyToClipboard(_ string: String?) {
-    guard let string else { return }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(string, forType: .string)
-}
-
-// MARK: - Audio Level Color
-
-/// Returns a color for the given normalized audio level (0.0–1.0).
-/// Shared by `AudioWaveformView` and `AudioLevelPopoverView`.
-func audioLevelColor(level: Float, isActive: Bool) -> Color {
-    if !isActive { return .secondary }
-    if level > 0.92 { return .red }
-    if level > 0.78 { return .orange }
-    if level > 0.2 { return .green }
-    return .gray   // below silence threshold (~-40 dB)
+extension NSPasteboard {
+    /// Replaces the pasteboard contents with the given string.
+    func copyString(_ string: String?) {
+        guard let string else { return }
+        clearContents()
+        setString(string, forType: .string)
+    }
 }
 
 // MARK: - Audio Waveform Visualization
@@ -185,12 +173,22 @@ struct AudioWaveformView: View {
 
     private let barSpacing: CGFloat = 1
 
+    /// Returns a color for the given normalized audio level (0.0–1.0).
+    /// Shared by `AudioWaveformView` and `AudioLevelPopoverView`.
+    static func levelColor(_ level: Float, isActive: Bool) -> Color {
+        if !isActive { return .secondary }
+        if level > 0.92 { return .red }
+        if level > 0.78 { return .orange }
+        if level > 0.2 { return .green }
+        return .gray   // below silence threshold (~-40 dB)
+    }
+
     var body: some View {
         HStack(spacing: barSpacing) {
             ForEach(levels.indices, id: \.self) { index in
                 let level = CGFloat(levels[index])
                 RoundedRectangle(cornerRadius: 0.5)
-                    .fill(audioLevelColor(level: levels[index], isActive: isActive))
+                    .fill(Self.levelColor(levels[index], isActive: isActive))
                     .frame(width: 1, height: max(2, level * 28))
             }
         }
