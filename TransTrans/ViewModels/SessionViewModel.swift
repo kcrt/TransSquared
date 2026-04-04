@@ -9,6 +9,13 @@ private let logger = Logger.app("Session")
 @Observable
 @MainActor
 final class SessionViewModel {
+
+    // MARK: - Persistence
+
+    /// The `UserDefaults` instance used for all persistence.
+    /// Defaults to `.standard`; tests can inject a dedicated suite to avoid side-effects.
+    let defaults: UserDefaults
+
     // MARK: - Published State
 
     /// The source of truth for all transcript data. Each entry groups source segments with translations.
@@ -85,7 +92,7 @@ final class SessionViewModel {
     var fileTranscriptionSourceURL: URL?
 
     /// Custom vocabulary words per source locale, keyed by locale identifier (persisted via UserDefaults).
-    var contextualStringsByLocale: [String: [String]] = SessionViewModel.loadFromUserDefaults(forKey: "contextualStringsByLocale") ?? [:] {
+    var contextualStringsByLocale: [String: [String]] = [:] {
         didSet { persistToUserDefaults(contextualStringsByLocale, forKey: "contextualStringsByLocale") }
     }
 
@@ -96,7 +103,7 @@ final class SessionViewModel {
     }
 
     /// Auto-replacement rules per source locale, keyed by locale identifier (persisted via UserDefaults).
-    var autoReplacementsByLocale: [String: [AutoReplacement]] = SessionViewModel.loadFromUserDefaults(forKey: "autoReplacementsByLocale") ?? [:] {
+    var autoReplacementsByLocale: [String: [AutoReplacement]] = [:] {
         didSet { persistToUserDefaults(autoReplacementsByLocale, forKey: "autoReplacementsByLocale") }
     }
 
@@ -107,8 +114,8 @@ final class SessionViewModel {
     }
 
     /// Silence duration (in seconds) before a sentence boundary is assumed (persisted via UserDefaults).
-    var sentenceBoundarySeconds: Double = UserDefaults.standard.object(forKey: "sentenceBoundarySeconds") as? Double ?? 3.0 {
-        didSet { UserDefaults.standard.set(sentenceBoundarySeconds, forKey: "sentenceBoundarySeconds") }
+    var sentenceBoundarySeconds: Double = 3.0 {
+        didSet { defaults.set(sentenceBoundarySeconds, forKey: "sentenceBoundarySeconds") }
     }
 
     /// Applies auto-replacement rules to the given text.
@@ -144,8 +151,8 @@ final class SessionViewModel {
 
     // Language selection stored as String identifiers for reliable Picker binding.
     // Persisted via UserDefaults so the last-used languages are restored on relaunch.
-    var sourceLocaleIdentifier: String = UserDefaults.standard.string(forKey: "sourceLocaleIdentifier") ?? "ja_JP" {
-        didSet { UserDefaults.standard.set(sourceLocaleIdentifier, forKey: "sourceLocaleIdentifier") }
+    var sourceLocaleIdentifier: String = "ja_JP" {
+        didSet { defaults.set(sourceLocaleIdentifier, forKey: "sourceLocaleIdentifier") }
     }
     /// Convenience accessor for the primary target language (slot 0 of `targetLanguageIdentifiers`).
     var targetLanguageIdentifier: String {
@@ -166,22 +173,13 @@ final class SessionViewModel {
     static let maxTargetCount = 3
 
     /// Number of active target panes (1, 2, or 3).
-    var targetCount: Int = {
-        let stored = UserDefaults.standard.integer(forKey: "targetCount")
-        if stored >= 1 && stored <= 3 { return stored }
-        return 1
-    }() {
-        didSet { UserDefaults.standard.set(targetCount, forKey: "targetCount") }
+    var targetCount: Int = 1 {
+        didSet { defaults.set(targetCount, forKey: "targetCount") }
     }
 
     /// Target language identifiers for all slots (always 3 elements; only first `targetCount` are active).
-    var targetLanguageIdentifiers: [String] = {
-        if let stored = UserDefaults.standard.array(forKey: "targetLanguageIdentifiers") as? [String], stored.count >= 3 {
-            return stored
-        }
-        return ["en", "zh-Hans", "ko"]
-    }() {
-        didSet { UserDefaults.standard.set(targetLanguageIdentifiers, forKey: "targetLanguageIdentifiers") }
+    var targetLanguageIdentifiers: [String] = ["en", "zh-Hans", "ko"] {
+        didSet { defaults.set(targetLanguageIdentifiers, forKey: "targetLanguageIdentifiers") }
     }
 
     // MARK: - Computed Properties
@@ -629,14 +627,35 @@ final class SessionViewModel {
 
     // MARK: - UserDefaults Helpers
 
-    private static func loadFromUserDefaults<T: Codable>(forKey key: String) -> T? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+    private static func loadFromDefaults<T: Codable>(_ defaults: UserDefaults, forKey key: String) -> T? {
+        guard let data = defaults.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(T.self, from: data)
     }
 
     private func persistToUserDefaults<T: Codable>(_ value: T, forKey key: String) {
         if let data = try? JSONEncoder().encode(value) {
-            UserDefaults.standard.set(data, forKey: key)
+            defaults.set(data, forKey: key)
+        }
+    }
+
+    // MARK: - Initialization
+
+    /// Creates a new session view model.
+    /// - Parameter defaults: The `UserDefaults` instance to use. Pass a dedicated suite in tests.
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+
+        // Restore persisted values
+        self.contextualStringsByLocale = Self.loadFromDefaults(defaults, forKey: "contextualStringsByLocale") ?? [:]
+        self.autoReplacementsByLocale = Self.loadFromDefaults(defaults, forKey: "autoReplacementsByLocale") ?? [:]
+        self.sentenceBoundarySeconds = defaults.object(forKey: "sentenceBoundarySeconds") as? Double ?? 3.0
+        self.sourceLocaleIdentifier = defaults.string(forKey: "sourceLocaleIdentifier") ?? "ja_JP"
+
+        let storedCount = defaults.integer(forKey: "targetCount")
+        self.targetCount = (1...3).contains(storedCount) ? storedCount : 1
+
+        if let stored = defaults.array(forKey: "targetLanguageIdentifiers") as? [String], stored.count >= 3 {
+            self.targetLanguageIdentifiers = stored
         }
     }
 }

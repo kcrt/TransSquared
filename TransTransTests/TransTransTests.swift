@@ -9,6 +9,16 @@ import Foundation
 import Testing
 @testable import TransTrans
 
+// MARK: - Test Helpers
+
+/// Creates an ephemeral `UserDefaults` suite that won't pollute the app's real settings.
+@MainActor
+private func makeTestViewModel() -> SessionViewModel {
+    let suiteName = "com.transtrans.tests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    return SessionViewModel(defaults: defaults)
+}
+
 // MARK: - 1. TranscriptModels Tests
 
 struct TransStringTests {
@@ -268,7 +278,7 @@ struct TranslationSlotTests {
 struct AutoReplacementLogicTests {
 
     @Test func singleRule() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.autoReplacementsByLocale[vm.sourceLocaleIdentifier] = [
             AutoReplacement(from: "teh", to: "the")
         ]
@@ -276,7 +286,7 @@ struct AutoReplacementLogicTests {
     }
 
     @Test func multipleRules() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.autoReplacementsByLocale[vm.sourceLocaleIdentifier] = [
             AutoReplacement(from: "teh", to: "the"),
             AutoReplacement(from: "quik", to: "quick"),
@@ -285,7 +295,7 @@ struct AutoReplacementLogicTests {
     }
 
     @Test func emptyFromIsSkipped() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.autoReplacementsByLocale[vm.sourceLocaleIdentifier] = [
             AutoReplacement(from: "", to: "anything"),
             AutoReplacement(from: "cat", to: "dog"),
@@ -294,13 +304,13 @@ struct AutoReplacementLogicTests {
     }
 
     @Test func noRulesReturnsOriginal() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.autoReplacementsByLocale[vm.sourceLocaleIdentifier] = []
         #expect(vm.applyAutoReplacements("hello world") == "hello world")
     }
 
     @Test func rulesAreScopedPerLocale() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.sourceLocaleIdentifier = "en_US"
         vm.autoReplacementsByLocale["en_US"] = [
             AutoReplacement(from: "colour", to: "color")
@@ -321,8 +331,8 @@ struct AutoReplacementLogicTests {
 struct TranscriptionEventTests {
 
     @Test func partialEventSetsPendingPartial() {
-        let vm = SessionViewModel()
-        vm.handleTranscriptionEvent(.partial("Hello", duration: nil))
+        let vm = makeTestViewModel()
+        vm.handleTranscriptionEvent(.partial("Hello", duration: nil, audioOffset: nil))
         #expect(vm.entries.count == 1)
         #expect(vm.entries[0].pendingPartial == "Hello")
         #expect(vm.entries[0].source.text.isEmpty)
@@ -333,9 +343,9 @@ struct TranscriptionEventTests {
     }
 
     @Test func partialEventReplacesPreviousPartial() {
-        let vm = SessionViewModel()
-        vm.handleTranscriptionEvent(.partial("Hel", duration: nil))
-        vm.handleTranscriptionEvent(.partial("Hello", duration: nil))
+        let vm = makeTestViewModel()
+        vm.handleTranscriptionEvent(.partial("Hel", duration: nil, audioOffset: nil))
+        vm.handleTranscriptionEvent(.partial("Hello", duration: nil, audioOffset: nil))
         #expect(vm.entries.count == 1)
         #expect(vm.entries[0].pendingPartial == "Hello")
         #expect(vm.sourceLines.count == 1)
@@ -343,26 +353,26 @@ struct TranscriptionEventTests {
     }
 
     @Test func finalEventClearsPartialAndAccumulatesSource() {
-        let vm = SessionViewModel()
-        vm.handleTranscriptionEvent(.partial("Hello", duration: nil))
+        let vm = makeTestViewModel()
+        vm.handleTranscriptionEvent(.partial("Hello", duration: nil, audioOffset: nil))
         #expect(vm.entries[0].pendingPartial == "Hello")
 
-        vm.handleTranscriptionEvent(.finalized("Hello world.", duration: nil))
+        vm.handleTranscriptionEvent(.finalized("Hello world.", duration: nil, audioOffset: nil))
         // Partial cleared, source accumulated
         #expect(vm.entries[0].pendingPartial == nil)
         #expect(vm.entries[0].source.text == "Hello world.")
     }
 
     @Test func finalEventPopulatesPendingSentenceBuffer() {
-        let vm = SessionViewModel()
-        vm.handleTranscriptionEvent(.finalized("Hello", duration: nil))
+        let vm = makeTestViewModel()
+        vm.handleTranscriptionEvent(.finalized("Hello", duration: nil, audioOffset: nil))
         #expect(vm.pendingSentenceBuffer == "Hello")
     }
 
     @Test func multipleFinalEventsAccumulateBuffer() {
-        let vm = SessionViewModel()
-        vm.handleTranscriptionEvent(.finalized("Hello ", duration: nil))
-        vm.handleTranscriptionEvent(.finalized("world", duration: nil))
+        let vm = makeTestViewModel()
+        vm.handleTranscriptionEvent(.finalized("Hello ", duration: nil, audioOffset: nil))
+        vm.handleTranscriptionEvent(.finalized("world", duration: nil, audioOffset: nil))
         // "Hello " ends without sentence-ending punctuation, so buffer accumulates
         #expect(vm.pendingSentenceBuffer == "Hello world")
         // Source text also accumulates within the same entry
@@ -370,7 +380,7 @@ struct TranscriptionEventTests {
     }
 
     @Test func errorEventSetsErrorMessage() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.handleTranscriptionEvent(.error("Something went wrong"))
         #expect(vm.errorMessage == "Something went wrong")
     }
@@ -383,7 +393,7 @@ struct SentenceBoundaryTests {
 
     /// Helper: creates a VM with an uncommitted entry so commitSentence has something to commit.
     private func vmWithPendingEntry(buffer: String) -> SessionViewModel {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.pendingSentenceBuffer = buffer
         // Create an uncommitted entry with source text (simulates finalized event)
         vm.entries.append(TranscriptEntry(
@@ -436,7 +446,7 @@ struct SentenceBoundaryTests {
     }
 
     @Test func noCommitWithoutPunctuation() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.pendingSentenceBuffer = "Hello world"
         vm.entries.append(TranscriptEntry(
             source: TransString(text: "Hello world", isPartial: false)
@@ -447,7 +457,7 @@ struct SentenceBoundaryTests {
     }
 
     @Test func emptyBufferNoCommit() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.pendingSentenceBuffer = ""
         vm.checkSentenceBoundary()
         #expect(vm.segmentIndex == 0)
@@ -460,7 +470,7 @@ struct SentenceBoundaryTests {
 struct ExportTests {
 
     @Test func copyAllOriginalJoinsSourceTexts() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.entries = [
             TranscriptEntry(source: TransString(text: "Line 1", isPartial: false)),
             TranscriptEntry(source: TransString(text: "Line 2", isPartial: false)),
@@ -469,7 +479,7 @@ struct ExportTests {
     }
 
     @Test func copyAllOriginalExcludesSeparatorsAndEmpty() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.entries = [
             TranscriptEntry(source: TransString(text: "Line 1", isPartial: false), isCommitted: true),
             TranscriptEntry(isSeparator: true),
@@ -480,13 +490,13 @@ struct ExportTests {
     }
 
     @Test func copyAllOriginalEmptyReturnsEmpty() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.entries = []
         #expect(vm.copyAllOriginal() == "")
     }
 
     @Test func copyAllTranslationSingleSlot() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.translationSlots = [TranslationSlot()]
         var entry1 = TranscriptEntry(isCommitted: true)
         entry1.translations[0] = TransString(text: "Translated 1", isPartial: false)
@@ -499,7 +509,7 @@ struct ExportTests {
     }
 
     @Test func copyAllTranslationMultiSlotWithHeaders() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.targetCount = 2
         vm.targetLanguageIdentifiers = ["en", "zh-Hans", "ko"]
         vm.translationSlots = [TranslationSlot(), TranslationSlot()]
@@ -515,7 +525,7 @@ struct ExportTests {
     }
 
     @Test func copyAllInterleavedFormat() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.translationSlots = [TranslationSlot()]
         var entry1 = TranscriptEntry(
             source: TransString(text: "Source 1", isPartial: false),
@@ -537,7 +547,7 @@ struct ExportTests {
     }
 
     @Test func clearHistoryEmptiesEntries() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.entries = [
             TranscriptEntry(source: TransString(text: "Line", isPartial: false), isCommitted: true)
         ]
@@ -568,24 +578,24 @@ struct TranslationQueueItemTests {
 struct EntryHelperTests {
 
     @Test func currentEntryIndexReturnsNilWhenEmpty() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         #expect(vm.currentEntryIndex == nil)
     }
 
     @Test func currentEntryIndexReturnsNilWhenLastIsCommitted() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.entries = [TranscriptEntry(isCommitted: true)]
         #expect(vm.currentEntryIndex == nil)
     }
 
     @Test func currentEntryIndexReturnsNilWhenLastIsSeparator() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.entries = [TranscriptEntry(isSeparator: true)]
         #expect(vm.currentEntryIndex == nil)
     }
 
     @Test func currentEntryIndexReturnsUncommittedEntry() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.entries = [
             TranscriptEntry(isCommitted: true),
             TranscriptEntry(isCommitted: false),
@@ -594,7 +604,7 @@ struct EntryHelperTests {
     }
 
     @Test func ensureCurrentEntryCreatesNewIfNeeded() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         let idx = vm.ensureCurrentEntry()
         #expect(idx == 0)
         #expect(vm.entries.count == 1)
@@ -602,7 +612,7 @@ struct EntryHelperTests {
     }
 
     @Test func ensureCurrentEntryReusesExisting() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         let idx1 = vm.ensureCurrentEntry()
         let idx2 = vm.ensureCurrentEntry()
         #expect(idx1 == idx2)
@@ -616,7 +626,7 @@ struct EntryHelperTests {
 struct LanguageSwapTests {
 
     @Test func swapIsDisabledDuringActiveSession() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.isSessionActive = true
         let oldSource = vm.sourceLocaleIdentifier
         let oldTarget = vm.targetLanguageIdentifier
@@ -627,7 +637,7 @@ struct LanguageSwapTests {
     }
 
     @Test func swapWithEmptyLocalesIsNoOp() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.supportedSourceLocales = []
         let oldSource = vm.sourceLocaleIdentifier
         let oldTarget = vm.targetLanguageIdentifier
@@ -638,7 +648,7 @@ struct LanguageSwapTests {
     }
 
     @Test func swapWithMatchingLocalesSwapsCorrectly() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.isSessionActive = false
         // Set up locales: source=ja_JP, target=en
         vm.sourceLocaleIdentifier = "ja_JP"
@@ -662,19 +672,19 @@ struct LanguageSwapTests {
 struct HasTranscriptContentTests {
 
     @Test func emptyStateReturnsFalse() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.entries = []
         #expect(vm.hasTranscriptContent == false)
     }
 
     @Test func withEntriesReturnsTrue() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.entries = [TranscriptEntry(source: TransString(text: "Hello", isPartial: false))]
         #expect(vm.hasTranscriptContent == true)
     }
 
     @Test func withSeparatorOnlyReturnsTrue() {
-        let vm = SessionViewModel()
+        let vm = makeTestViewModel()
         vm.entries = [TranscriptEntry(isSeparator: true)]
         #expect(vm.hasTranscriptContent == true)
     }
@@ -698,7 +708,7 @@ struct AudioFileTranscriptionTests {
     private func collectFinalizedTexts(from stream: AsyncStream<TranscriptionEvent>) async -> [String] {
         var texts: [String] = []
         for await event in stream {
-            if case .finalized(let text, _) = event {
+            if case .finalized(let text, _, _) = event {
                 texts.append(text)
             }
         }
