@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import os
 import SwiftUI
 
 /// Manages a borderless, transparent overlay window that displays subtitle text
@@ -12,6 +13,10 @@ final class SubtitleWindowController {
 
     /// Called when the user wants to exit subtitle mode (e.g. via ⌘D while overlay is shown).
     var onDismiss: (() -> Void)?
+
+    nonisolated deinit {
+        updateTimer?.invalidate()
+    }
 
     func show(viewModel: SessionViewModel) {
         guard window == nil else { return }
@@ -86,6 +91,10 @@ final class SubtitleWindowController {
 
     private var updateTimer: Timer?
     private var keyMonitor: Any?
+    /// Whether an observation-triggered update is already scheduled.
+    /// Accessed from the arbitrary thread where `onChange` fires, so it
+    /// needs its own synchronization.
+    private nonisolated let updateScheduled = OSAllocatedUnfairLock(initialState: false)
 
     private func startObserving() {
         observeViewModel()
@@ -99,13 +108,22 @@ final class SubtitleWindowController {
     }
 
     /// Reactively updates subtitle content when ViewModel properties change.
+    /// Uses a coalescing flag so rapid-fire changes batch into a single update
+    /// per run-loop cycle instead of spawning a new Task per change.
     private func observeViewModel() {
         guard viewModel != nil, hostingView != nil else { return }
         withObservationTracking {
             updateContent()
         } onChange: { [weak self] in
             guard let self else { return }
+            let alreadyScheduled = self.updateScheduled.withLock { scheduled -> Bool in
+                if scheduled { return true }
+                scheduled = true
+                return false
+            }
+            guard !alreadyScheduled else { return }
             Task { @MainActor in
+                self.updateScheduled.withLock { $0 = false }
                 self.observeViewModel()
             }
         }

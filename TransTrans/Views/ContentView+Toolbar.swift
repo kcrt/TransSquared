@@ -247,9 +247,10 @@ extension ContentView {
     /// Creates an SF Symbol NSImage tinted red with `isTemplate = false`
     /// so that macOS toolbar styling does not override the color.
     private static func redSymbol(named name: String) -> NSImage {
-        let base = NSImage(systemSymbolName: name, accessibilityDescription: nil)!
-        let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
-        let colored = base.withSymbolConfiguration(config)!
+        guard let base = NSImage(systemSymbolName: name, accessibilityDescription: nil),
+              let colored = base.withSymbolConfiguration(.init(paletteColors: [.systemRed])) else {
+            return NSImage()
+        }
         colored.isTemplate = false
         return colored
     }

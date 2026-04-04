@@ -11,20 +11,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Disable window tabbing — this app uses a single window, so
         // the "Show Tab Bar" menu item is unnecessary.
         NSWindow.allowsAutomaticWindowTabbing = false
+
+        // Observe window close events so we can clean up orphaned panels.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowDidClose(_:)),
+            name: NSWindow.willCloseNotification,
+            object: nil
+        )
     }
 
-    func applicationDidUpdate(_ notification: Notification) {
-        let app = NSApplication.shared
-        // Check if only non-activating panels remain (no regular windows).
-        // A miniaturized window still counts as "present" — only truly invisible
-        // (closed) windows should trigger panel cleanup.
-        let hasRegularWindow = app.windows.contains { window in
-            (window.isVisible || window.isMiniaturized) && !(window is NSPanel)
-        }
-        if !hasRegularWindow {
-            // Close all remaining panels so applicationShouldTerminateAfterLastWindowClosed triggers
-            for window in app.windows where window is NSPanel && window.isVisible {
-                window.orderOut(nil)
+    @objc private func windowDidClose(_ notification: Notification) {
+        guard let closedWindow = notification.object as? NSWindow,
+              !(closedWindow is NSPanel) else { return }
+
+        // After a regular window closes, check if any regular windows remain.
+        // Dispatch async so the window list has been updated.
+        DispatchQueue.main.async {
+            let app = NSApplication.shared
+            let hasRegularWindow = app.windows.contains { window in
+                (window.isVisible || window.isMiniaturized) && !(window is NSPanel)
+            }
+            if !hasRegularWindow {
+                for window in app.windows where window is NSPanel && window.isVisible {
+                    window.orderOut(nil)
+                }
             }
         }
     }

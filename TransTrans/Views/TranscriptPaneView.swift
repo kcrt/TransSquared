@@ -84,6 +84,9 @@ struct TranscriptPaneView: View {
                         }
                     }
                     .frame(minWidth: 40, alignment: .trailing)
+                    .accessibilityElement()
+                    .accessibilityLabel(formatElapsedTime(elapsed))
+                    .accessibilityAddTraits(canPlayback ? .isButton : [])
                     .onHover { isHovered in
                         hoveredLineID = isHovered ? line.id : nil
                     }

@@ -210,8 +210,11 @@ extension SessionViewModel {
     }
 
     /// Determines whether an error represents a Translation framework session cancellation.
+    /// The Translation framework signals session invalidation with code 2 in its error domain.
+    /// Only match that specific code; other errors (e.g., network, unsupported language)
+    /// should propagate as real failures.
     private static func isTranslationSessionCancellation(_ error: Error) -> Bool {
         let nsError = error as NSError
-        return nsError.domain.contains("Translation")
+        return nsError.domain.contains("Translation") && nsError.code == 2
     }
 }

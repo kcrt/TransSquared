@@ -194,5 +194,7 @@ struct AudioWaveformView: View {
         }
         .opacity(isActive ? 1.0 : 0.3)
         .animation(.easeOut(duration: 0.08), value: levels)
+        .accessibilityElement()
+        .accessibilityLabel(isActive ? String(localized: "Audio waveform, active") : String(localized: "Audio waveform, inactive"))
     }
 }

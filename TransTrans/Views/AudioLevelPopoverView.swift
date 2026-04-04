@@ -117,6 +117,8 @@ struct AudioLevelPopoverView: View {
             }
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
             .clipShape(RoundedRectangle(cornerRadius: 4))
+            .accessibilityElement()
+            .accessibilityLabel(String(localized: "Audio level chart"))
         }
     }
 
@@ -147,6 +149,8 @@ struct AudioLevelPopoverView: View {
                         .foregroundStyle(.secondary)
                         .font(.caption)
                     Slider(value: $micVolume, in: 0...1, step: 0.05)
+                        .accessibilityLabel(String(localized: "Input Volume"))
+                        .accessibilityValue("\(Int(micVolume * 100))%")
                         .onChange(of: micVolume) { _, newValue in
                             volumeService.setInputVolume(newValue)
                         }
