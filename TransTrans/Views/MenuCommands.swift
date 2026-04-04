@@ -69,6 +69,13 @@ struct AppMenuCommands: Commands {
                 }
             }
             .disabled(viewModel?.hasTranscriptContent != true)
+
+            Divider()
+
+            Button("Save Audio Recording (.m4a)...") {
+                viewModel?.exportAudioRecording()
+            }
+            .disabled(viewModel?.hasRecording != true)
         }
 
         // Edit menu: Copy and Clear
