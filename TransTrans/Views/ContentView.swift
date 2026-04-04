@@ -28,7 +28,7 @@ struct ContentView: View {
                     }
                 },
                 highlightedSentenceID: viewModel.highlightedSentenceID,
-                canPlayback: viewModel.hasRecording,
+                canPlayback: viewModel.hasRecording && !viewModel.isSessionActive,
                 playingEntryID: viewModel.playbackService?.playingEntryID,
                 onPlayFromTimestamp: { elapsed, entryID in
                     viewModel.playFromTimestamp(elapsed, entryID: entryID)
