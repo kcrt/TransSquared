@@ -48,6 +48,12 @@ extension ContentView {
                 } label: {
                     CheckmarkLabel(title: String(localized: "System Default"), isSelected: viewModel.selectedMicrophoneID.isEmpty)
                 }
+                if viewModel.selectedMicrophoneID.isEmpty,
+                   let defaultName = AVCaptureDevice.default(for: .audio)?.localizedName {
+                    Text("  ↳ \(defaultName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Divider()
                 ForEach(viewModel.availableMicrophones, id: \.uniqueID) { device in
                     Button {
