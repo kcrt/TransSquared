@@ -30,33 +30,14 @@ extension ContentView {
             }
             .help("Audio Level Monitor")
 
-            // Session toggle (split button): click to start/stop, dropdown to pick mode
-            Menu {
-                Button {
-                    viewModel.setSessionMode(.transcribeOnly)
-                } label: {
-                    CheckmarkLabel(
-                        title: String(localized: "音声認識", comment: "Transcribe-only session mode"),
-                        isSelected: viewModel.sessionMode == .transcribeOnly
-                    )
-                }
-                Button {
-                    viewModel.setSessionMode(.recordAndTranscribe)
-                } label: {
-                    CheckmarkLabel(
-                        title: String(localized: "録音しながら音声認識", comment: "Record + transcribe session mode"),
-                        isSelected: viewModel.sessionMode == .recordAndTranscribe
-                    )
-                }
+            // Session toggle: start/stop recording + transcription
+            Button {
+                viewModel.toggleSession()
             } label: {
                 Image(nsImage: Self.redSymbol(named: sessionButtonIcon))
                     .symbolEffect(.pulse, options: .repeating, isActive: shouldBlinkRecordIcon)
                     .accessibilityLabel(viewModel.isSessionActive ? "Stop" : "Start")
-            } primaryAction: {
-                viewModel.toggleSession()
             }
-            .menuIndicator(.visible)
-            .id(viewModel.sessionMode)
             .help(viewModel.isSessionActive ? "Stop (⌘R)" : "Start (⌘R)")
 
             Menu {
@@ -248,15 +229,7 @@ extension ContentView {
     // MARK: - Session Button Helpers
 
     private var sessionButtonIcon: String {
-        if viewModel.isSessionActive {
-            return "stop.fill"
-        }
-        switch viewModel.sessionMode {
-        case .transcribeOnly:
-            return "ear"
-        case .recordAndTranscribe:
-            return "record.circle"
-        }
+        viewModel.isSessionActive ? "stop.fill" : "circle.fill"
     }
 
     private var shouldBlinkRecordIcon: Bool {

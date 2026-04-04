@@ -192,13 +192,6 @@ struct RecordingSegment {
     let elapsedTimeOffset: TimeInterval
 }
 
-/// Controls whether the session records audio alongside transcription.
-enum SessionMode: String, CaseIterable {
-    /// Transcribe speech without recording audio.
-    case transcribeOnly
-    /// Record audio to a temporary m4a file while transcribing.
-    case recordAndTranscribe
-}
 
 /// Controls the display style of the main content area.
 /// The number of translation panes is determined by `targetCount`, not by the display mode.

@@ -33,20 +33,9 @@ final class SessionViewModel {
     }
     var isSessionActive = false
 
-    // MARK: - Session Mode & Recording State
+    // MARK: - Recording State
 
-    /// Whether the session transcribes only or also records audio (persisted via UserDefaults).
-    var sessionMode: SessionMode = {
-        if let raw = UserDefaults.standard.string(forKey: "sessionMode"),
-           let mode = SessionMode(rawValue: raw) {
-            return mode
-        }
-        return .transcribeOnly
-    }() {
-        didSet { UserDefaults.standard.set(sessionMode.rawValue, forKey: "sessionMode") }
-    }
-
-    /// The active recording service (non-nil only while recording in `.recordAndTranscribe` mode).
+    /// The active recording service (non-nil while a session is running).
     var recordingService: AudioRecordingService?
     /// All recording segments captured during this session (one per start/stop cycle).
     var recordingSegments: [RecordingSegment] = []
@@ -55,10 +44,7 @@ final class SessionViewModel {
     /// Whether any recording file exists (enables playback UI).
     var hasRecording: Bool { !recordingSegments.isEmpty }
 
-    /// Pending mode switch awaiting user confirmation (non-nil when confirmation alert is shown).
-    var pendingModeSwitch: SessionMode?
-    /// Whether the mode-switch confirmation alert is presented.
-    var showModeSwitchConfirmation = false
+
 
     // MARK: - Playback State
 
@@ -424,20 +410,16 @@ final class SessionViewModel {
 
         transcriptionTask = Task {
             do {
-                // Start recording if in record-and-transcribe mode
-                var writerInput: AVAssetWriterInput?
-                var writer: AVAssetWriter?
-                if sessionMode == .recordAndTranscribe {
-                    let recorder = AudioRecordingService()
-                    let url = try recorder.startRecording()
-                    self.recordingService = recorder
-                    self.recordingSegments.append(
-                        RecordingSegment(url: url, elapsedTimeOffset: accumulatedElapsedTime)
-                    )
-                    writerInput = recorder.audioWriterInput
-                    writer = recorder.assetWriter
-                    logger.info("Audio recording started: \(url.lastPathComponent)")
-                }
+                // Start recording alongside transcription
+                let recorder = AudioRecordingService()
+                let url = try recorder.startRecording()
+                self.recordingService = recorder
+                self.recordingSegments.append(
+                    RecordingSegment(url: url, elapsedTimeOffset: accumulatedElapsedTime)
+                )
+                let writerInput = recorder.audioWriterInput
+                let writer = recorder.assetWriter
+                logger.info("Audio recording started: \(url.lastPathComponent)")
 
                 logger.info("Starting transcription manager...")
                 let streams = try await transcriptionManager.start(locale: sourceLocale, audioDevice: selectedMicrophone, contextualStrings: currentContextualStrings, recordingInput: writerInput, recordingWriter: writer)
@@ -540,28 +522,6 @@ final class SessionViewModel {
                 await startSession()
             }
         }
-    }
-
-    // MARK: - Session Mode
-
-    /// Changes the session mode, potentially showing a confirmation alert if a recording exists.
-    func setSessionMode(_ mode: SessionMode) {
-        guard mode != sessionMode else { return }
-        guard !isSessionActive else { return }
-        if hasRecording {
-            pendingModeSwitch = mode
-            showModeSwitchConfirmation = true
-            return
-        }
-        sessionMode = mode
-    }
-
-    /// Confirms the pending mode switch, cleaning up any existing recording.
-    func confirmModeSwitch() {
-        guard let mode = pendingModeSwitch else { return }
-        cleanupRecording()
-        sessionMode = mode
-        pendingModeSwitch = nil
     }
 
     // MARK: - Playback
