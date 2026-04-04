@@ -20,7 +20,7 @@ final class AudioCaptureService {
     private var levelContinuation: AsyncStream<Float>.Continuation?
     private(set) var audioLevelStream: AsyncStream<Float>?
 
-    func startCapture(audioFormat: AVAudioFormat, device: AVCaptureDevice? = nil, recordingWriter: AVAssetWriter? = nil) throws -> AsyncStream<AnalyzerInput> {
+    func startCapture(audioFormat: AVAudioFormat, device: AVCaptureDevice? = nil, recordingService: AudioRecordingService? = nil) throws -> AsyncStream<AnalyzerInput> {
         guard !isCapturing else {
             logger.error("startCapture called while already capturing")
             throw TransTransError.alreadyCapturing
@@ -78,7 +78,7 @@ final class AudioCaptureService {
             continuation: continuation,
             levelContinuation: levelCont
         )
-        captureDelegate.recordingWriter = recordingWriter
+        captureDelegate.recordingService = recordingService
         self.delegate = captureDelegate
         audioOutput.setSampleBufferDelegate(captureDelegate, queue: captureQueue)
 

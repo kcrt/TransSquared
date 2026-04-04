@@ -55,7 +55,7 @@ actor TranscriptionManager {
     private var eventContinuation: AsyncStream<TranscriptionEvent>.Continuation?
     private var isRunning = false
 
-    func start(locale: Locale, audioDevice: AVCaptureDevice? = nil, contextualStrings: [String] = [], recordingWriter: AVAssetWriter? = nil) async throws -> TranscriptionStreams {
+    func start(locale: Locale, audioDevice: AVCaptureDevice? = nil, contextualStrings: [String] = [], recordingService: AudioRecordingService? = nil) async throws -> TranscriptionStreams {
         guard !isRunning else {
             logger.warning("start() called while already running")
             throw TransTransError.alreadyRunning
@@ -106,7 +106,7 @@ actor TranscriptionManager {
 
         // Start audio capture
         logger.info("Starting audio capture...")
-        let audioStream = try await captureService.startCapture(audioFormat: audioFormat, device: audioDevice, recordingWriter: recordingWriter)
+        let audioStream = try await captureService.startCapture(audioFormat: audioFormat, device: audioDevice, recordingService: recordingService)
         logger.info("Audio capture started successfully")
 
         // Create event stream

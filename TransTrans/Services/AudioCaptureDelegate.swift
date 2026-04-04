@@ -11,24 +11,22 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
     let targetFormat: AVAudioFormat
     let continuation: AsyncStream<AnalyzerInput>.Continuation
     let levelContinuation: AsyncStream<Float>.Continuation
+
+    // MARK: - Recording (delegated to AudioRecordingService)
+    var recordingService: AudioRecordingService?
+
+    // MARK: - Pipeline state (initialized on first buffer via setupPipeline)
+    private var sourceFormat: AVAudioFormat?
     private var converter: AVAudioConverter?
-    private var bufferCount = 0
+    private var needsConversion = false
+    private var conversionRatio: Double = 1.0
+    private var pipelineReady = false
 
     // Accumulation buffer: collect small chunks before yielding to the analyzer.
     // 4800 frames @ 16 kHz = 300 ms — enough context for the speech recognizer.
     private static let accumulationFrameCount: AVAudioFrameCount = 4800
     private var accumulationBuffer: AVAudioPCMBuffer?
     private var accumulatedFrames: AVAudioFrameCount = 0
-
-    // MARK: - Recording support
-    /// The asset writer for recording. The writer input is created lazily on the
-    /// first sample buffer so that the actual `formatDescription` (not the device's
-    /// hardware format) is used as `sourceFormatHint`.
-    var recordingWriter: AVAssetWriter?
-    /// Writer input created lazily from the first buffer's format description.
-    private var recordingInput: AVAssetWriterInput?
-    /// Tracks whether `startSession(atSourceTime:)` has been called on the writer.
-    private var recordingSessionStarted = false
 
     init(targetFormat: AVAudioFormat, continuation: AsyncStream<AnalyzerInput>.Continuation, levelContinuation: AsyncStream<Float>.Continuation) {
         self.targetFormat = targetFormat
@@ -37,72 +35,26 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
         super.init()
     }
 
+    // MARK: - AVCaptureAudioDataOutputSampleBufferDelegate
+
     func captureOutput(
         _ output: AVCaptureOutput,
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        bufferCount += 1
-
-        guard let formatDesc = sampleBuffer.formatDescription else {
-            logger.warning("Sample buffer has no format description")
-            return
-        }
-        guard let basicDesc = formatDesc.audioStreamBasicDescription else {
-            logger.warning("Cannot read ASBD from format description")
-            return
-        }
-
         let frameCount = sampleBuffer.numSamples
-        guard frameCount > 0 else {
-            logger.debug("Empty sample buffer received")
-            return
-        }
+        guard frameCount > 0 else { return }
 
-        // Forward raw CMSampleBuffer to the recorder (if active).
-        // This runs on the serial captureQueue, so AVAssetWriterInput.append is safe.
-        if let recordingWriter {
-            // Lazily create the writer input using the actual CMSampleBuffer's
-            // formatDescription — this ensures the AAC encoder knows the true
-            // source format (e.g. Float32 vs Int16) regardless of microphone.
-            if recordingInput == nil {
-                let input = AVAssetWriterInput(
-                    mediaType: .audio,
-                    outputSettings: AudioRecordingService.outputSettings,
-                    sourceFormatHint: sampleBuffer.formatDescription
-                )
-                input.expectsMediaDataInRealTime = true
-                recordingWriter.add(input)
-                guard recordingWriter.startWriting() else {
-                    logger.error("AVAssetWriter failed to start: \(recordingWriter.error?.localizedDescription ?? "unknown")")
-                    return
-                }
-                recordingWriter.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
-                recordingSessionStarted = true
-                recordingInput = input
-                logger.info("Created recording writer input with source format: \(String(describing: formatDesc))")
-            }
-            if let recordingInput, recordingInput.isReadyForMoreMediaData {
-                recordingInput.append(sampleBuffer)
-            }
-        }
+        // 1. Forward raw CMSampleBuffer to the recorder (if active).
+        recordingService?.appendSampleBuffer(sampleBuffer)
 
-        if bufferCount == 1 {
-            logger.info("First audio buffer received: \(basicDesc.mSampleRate) Hz, \(basicDesc.mChannelsPerFrame) ch, \(frameCount) frames")
+        // 2. Initialize pipeline on first buffer.
+        if !pipelineReady {
+            guard setupPipeline(from: sampleBuffer) else { return }
         }
+        guard let sourceFormat else { return }
 
-        // Create AVAudioFormat from the sample buffer's format
-        guard let sourceFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: basicDesc.mSampleRate,
-            channels: basicDesc.mChannelsPerFrame,
-            interleaved: false
-        ) else {
-            logger.error("Failed to create source AVAudioFormat")
-            return
-        }
-
-        // Convert CMSampleBuffer to AVAudioPCMBuffer
+        // 3. Convert CMSampleBuffer → AVAudioPCMBuffer
         guard let pcmBuffer = cmSampleBufferToAVAudioPCMBuffer(
             sampleBuffer,
             sourceFormat: sourceFormat,
@@ -112,61 +64,113 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
             return
         }
 
-        // Convert format if needed, or use directly
+        // 4. Resample if needed, or pass through
         let outputBuffer: AVAudioPCMBuffer
-        if sourceFormat.sampleRate == targetFormat.sampleRate
-            && sourceFormat.channelCount == targetFormat.channelCount
-            && sourceFormat.commonFormat == targetFormat.commonFormat {
-            outputBuffer = pcmBuffer
+        if needsConversion {
+            guard let converted = convert(pcmBuffer) else { return }
+            outputBuffer = converted
         } else {
-            // Lazy-create converter
-            if converter == nil {
-                logger.info("Creating audio converter: \(sourceFormat.sampleRate) Hz → \(self.targetFormat.sampleRate) Hz")
-                converter = AVAudioConverter(from: sourceFormat, to: targetFormat)
-                if converter == nil {
-                    logger.error("Failed to create AVAudioConverter")
-                }
-            }
-            guard let converter else { return }
-
-            let ratio = targetFormat.sampleRate / sourceFormat.sampleRate
-            let capacity = max(1, AVAudioFrameCount(Double(pcmBuffer.frameLength) * ratio) + 1)
-            guard let convertedBuffer = AVAudioPCMBuffer(
-                pcmFormat: targetFormat,
-                frameCapacity: capacity
-            ) else {
-                logger.error("Failed to create conversion output buffer")
-                return
-            }
-
-            var error: NSError?
-            let status = converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
-                outStatus.pointee = .haveData
-                return pcmBuffer
-            }
-
-            if let error {
-                logger.error("Audio conversion error: \(error.localizedDescription)")
-            }
-
-            guard status == .haveData, convertedBuffer.frameLength > 0 else {
-                logger.debug("Audio conversion produced no output (status=\(status.rawValue))")
-                return
-            }
-            outputBuffer = convertedBuffer
+            outputBuffer = pcmBuffer
         }
 
-        // Compute RMS level for waveform visualization
-        if let rms = outputBuffer.rmsLevel() {
-            // Convert to decibels, then map to 0–1 for display.
-            // Floor at –50 dB (silence); 0 dB (full-scale) maps to 1.0.
-            let db = 20 * log10(max(rms, 1e-10))
-            let floor: Float = -50
-            let normalized = max(0, min(1, (db - floor) / -floor))
-            levelContinuation.yield(normalized)
-        }
+        // 5. Compute audio level for waveform visualization
+        yieldAudioLevel(from: outputBuffer)
 
+        // 6. Accumulate and yield to analyzer
         accumulateAndYield(outputBuffer)
+    }
+
+    // MARK: - First-buffer pipeline initialization
+
+    /// Detects the source audio format from the first `CMSampleBuffer` and
+    /// creates an `AVAudioConverter` if the source differs from the target.
+    /// Returns `true` when the pipeline is ready for processing.
+    private func setupPipeline(from sampleBuffer: CMSampleBuffer) -> Bool {
+        guard let formatDesc = sampleBuffer.formatDescription else {
+            logger.warning("Sample buffer has no format description")
+            return false
+        }
+        guard let basicDesc = formatDesc.audioStreamBasicDescription else {
+            logger.warning("Cannot read ASBD from format description")
+            return false
+        }
+
+        // Build a non-interleaved Float32 format using the detected sample rate
+        // and channel count. AVCaptureAudioDataOutput on macOS delivers
+        // non-interleaved Float32 at the system sample rate.
+        guard let srcFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: basicDesc.mSampleRate,
+            channels: basicDesc.mChannelsPerFrame,
+            interleaved: false
+        ) else {
+            logger.error("Failed to create source AVAudioFormat")
+            return false
+        }
+        self.sourceFormat = srcFormat
+
+        let formatMatch = srcFormat.sampleRate == targetFormat.sampleRate
+            && srcFormat.channelCount == targetFormat.channelCount
+            && srcFormat.commonFormat == targetFormat.commonFormat
+        self.needsConversion = !formatMatch
+
+        if needsConversion {
+            self.conversionRatio = targetFormat.sampleRate / srcFormat.sampleRate
+            guard let conv = AVAudioConverter(from: srcFormat, to: targetFormat) else {
+                logger.error("Failed to create AVAudioConverter: \(srcFormat.sampleRate) Hz → \(self.targetFormat.sampleRate) Hz")
+                return false
+            }
+            self.converter = conv
+            logger.info("Audio pipeline: \(srcFormat.sampleRate) Hz \(srcFormat.channelCount)ch → \(self.targetFormat.sampleRate) Hz \(self.targetFormat.channelCount)ch")
+        } else {
+            logger.info("Audio pipeline: source matches target (\(srcFormat.sampleRate) Hz \(srcFormat.channelCount)ch)")
+        }
+
+        pipelineReady = true
+        return true
+    }
+
+    // MARK: - Format conversion
+
+    /// Resamples a PCM buffer from `sourceFormat` to `targetFormat`.
+    private func convert(_ pcmBuffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let converter else { return nil }
+
+        let capacity = max(1, AVAudioFrameCount(Double(pcmBuffer.frameLength) * conversionRatio) + 1)
+        guard let convertedBuffer = AVAudioPCMBuffer(
+            pcmFormat: targetFormat,
+            frameCapacity: capacity
+        ) else {
+            logger.error("Failed to create conversion output buffer")
+            return nil
+        }
+
+        var error: NSError?
+        let status = converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+            outStatus.pointee = .haveData
+            return pcmBuffer
+        }
+
+        if let error {
+            logger.error("Audio conversion error: \(error.localizedDescription)")
+        }
+
+        guard status == .haveData, convertedBuffer.frameLength > 0 else {
+            logger.debug("Audio conversion produced no output (status=\(status.rawValue))")
+            return nil
+        }
+        return convertedBuffer
+    }
+
+    // MARK: - Audio level metering
+
+    /// Computes RMS level and yields a normalized value (0–1) to the level stream.
+    private func yieldAudioLevel(from buffer: AVAudioPCMBuffer) {
+        guard let rms = buffer.rmsLevel() else { return }
+        let db = 20 * log10(max(rms, 1e-10))
+        let floor: Float = -50
+        let normalized = max(0, min(1, (db - floor) / -floor))
+        levelContinuation.yield(normalized)
     }
 
     /// Accumulates small PCM buffers into a larger one before yielding to the analyzer.
@@ -241,10 +245,9 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
         }
     }
 
-    /// Marks the recording writer input as finished so the asset writer can finalize.
+    /// Tells the recording service to mark its writer input as finished.
     func finishRecording() {
-        recordingInput?.markAsFinished()
-        recordingInput = nil
+        recordingService?.finishWriterInput()
     }
 
     /// Flushes any remaining accumulated audio to the analyzer.
