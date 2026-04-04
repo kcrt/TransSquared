@@ -142,14 +142,11 @@ extension SessionViewModel {
         let elapsed = entries[idx].elapsedTime
 
         // Create or reuse translation placeholder (may already exist from partial)
-        let transString: TransString
         if let existing = entries[idx].translations[slot], existing.isPartial {
-            // Reuse existing partial's ID for UI stability
-            transString = TransString(id: existing.id, text: "…", isPartial: true)
+            // Keep existing partial text visible until the final translation arrives
         } else {
-            transString = TransString(text: "…", isPartial: true)
+            entries[idx].translations[slot] = TransString(text: "…", isPartial: true)
         }
-        entries[idx].translations[slot] = transString
 
         translationSlots[slot].partialEntryID = nil
         enqueueTranslation(slot: slot, item: TranslationQueueItem(
