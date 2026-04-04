@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreAudio
 import os
 
@@ -5,26 +6,34 @@ private let logger = Logger.app("MicVolume")
 
 /// Provides get/set access to the macOS system input (microphone) volume
 /// using CoreAudio HAL APIs.
+///
+/// When initialized with an `AVCaptureDevice`, operations target that
+/// specific device. Otherwise, the system default input device is used.
 struct MicrophoneVolumeService {
+    private let deviceUID: String?
+
+    init(device: AVCaptureDevice? = nil) {
+        self.deviceUID = device?.uniqueID
+    }
 
     // MARK: - Public API
 
     /// Returns the current input volume (0.0–1.0), or nil if unavailable.
     func getInputVolume() -> Float? {
-        guard let deviceID = defaultInputDeviceID() else { return nil }
+        guard let deviceID = resolveDeviceID() else { return nil }
         return getVolumeScalar(device: deviceID, scope: kAudioDevicePropertyScopeInput)
     }
 
     /// Sets the input volume (0.0–1.0). Returns true on success.
     @discardableResult
     func setInputVolume(_ volume: Float) -> Bool {
-        guard let deviceID = defaultInputDeviceID() else { return false }
+        guard let deviceID = resolveDeviceID() else { return false }
         return setVolumeScalar(device: deviceID, scope: kAudioDevicePropertyScopeInput, volume: volume)
     }
 
-    /// Whether the default input device supports volume control.
+    /// Whether the target input device supports volume control.
     func isVolumeControlAvailable() -> Bool {
-        guard let deviceID = defaultInputDeviceID() else { return false }
+        guard let deviceID = resolveDeviceID() else { return false }
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyVolumeScalar,
             mScope: kAudioDevicePropertyScopeInput,
@@ -37,6 +46,37 @@ struct MicrophoneVolumeService {
     }
 
     // MARK: - Private Helpers
+
+    /// Resolves the target AudioDeviceID — by UID if specified, otherwise system default.
+    private func resolveDeviceID() -> AudioDeviceID? {
+        if let deviceUID {
+            return audioDeviceID(forUID: deviceUID)
+        }
+        return defaultInputDeviceID()
+    }
+
+    /// Translates an AVCaptureDevice UID to a CoreAudio AudioDeviceID.
+    private func audioDeviceID(forUID uid: String) -> AudioDeviceID? {
+        var deviceID = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var uid: CFString = uid as CFString
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            UInt32(MemoryLayout<CFString>.size), &uid,
+            &size, &deviceID
+        )
+        guard status == noErr, deviceID != kAudioObjectUnknown else {
+            logger.warning("Failed to translate UID to device: \(status)")
+            return nil
+        }
+        return deviceID
+    }
 
     private func defaultInputDeviceID() -> AudioDeviceID? {
         var deviceID = AudioDeviceID(0)

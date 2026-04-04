@@ -25,7 +25,9 @@ extension ContentView {
                 AudioLevelPopoverView(
                     audioLevels: viewModel.audioLevels,
                     isActive: viewModel.isSessionActive,
-                    silenceThreshold: SessionViewModel.silenceThreshold
+                    silenceThreshold: SessionViewModel.silenceThreshold,
+                    inputDeviceName: (viewModel.selectedMicrophone ?? AVCaptureDevice.default(for: .audio))?.localizedName,
+                    volumeService: MicrophoneVolumeService(device: viewModel.selectedMicrophone)
                 )
             }
             .help("Audio Level Monitor")

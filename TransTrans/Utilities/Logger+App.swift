@@ -4,7 +4,7 @@ import os
 
 extension Logger {
     /// Creates a Logger scoped to the TransTrans app with the given category.
-    static func app(_ category: String) -> Logger {
+    nonisolated static func app(_ category: String) -> Logger {
         Logger(subsystem: "net.kcrt.app.transtrans", category: category)
     }
 }

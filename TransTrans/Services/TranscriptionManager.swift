@@ -19,7 +19,7 @@ struct AudioTimeInfo: Sendable {
 
 /// Extracts the audio start offset and total spoken-audio duration from a `SpeechTranscriber.Result`'s
 /// attributed string by reading `TimeRangeAttribute` runs.
-func extractAudioTimeInfo(from text: AttributedString) -> AudioTimeInfo? {
+nonisolated func extractAudioTimeInfo(from text: AttributedString) -> AudioTimeInfo? {
     var minStart: CMTime?
     var maxEnd: CMTime?
     for run in text.runs {

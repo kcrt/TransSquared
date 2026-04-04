@@ -91,8 +91,9 @@ final class SubtitleWindowController {
         observeViewModel()
         // Periodic timer only for refreshing `now` to expire old subtitle lines (1s is sufficient).
         updateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
             Task { @MainActor in
-                self?.updateContent()
+                self.updateContent()
             }
         }
     }
@@ -103,8 +104,9 @@ final class SubtitleWindowController {
         withObservationTracking {
             updateContent()
         } onChange: { [weak self] in
+            guard let self else { return }
             Task { @MainActor in
-                self?.observeViewModel()
+                self.observeViewModel()
             }
         }
     }

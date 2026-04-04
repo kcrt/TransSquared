@@ -6,9 +6,10 @@ struct AudioLevelPopoverView: View {
     var audioLevels: [Float]
     var isActive: Bool
     var silenceThreshold: Float
+    var inputDeviceName: String?
+    var volumeService: MicrophoneVolumeService?
 
     @State private var micVolume: Float = 1.0
-    private let volumeService = MicrophoneVolumeService()
 
     /// dB tick marks and their normalized Y positions.
     private static let dbTicks: [(db: Int, normalized: CGFloat)] = [
@@ -22,8 +23,15 @@ struct AudioLevelPopoverView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Audio Level Monitor")
-                .font(.headline)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("Audio Level Monitor")
+                    .font(.headline)
+                if let inputDeviceName {
+                    Text("— \(inputDeviceName)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             audioChart
                 .frame(height: 180)
@@ -35,7 +43,7 @@ struct AudioLevelPopoverView: View {
         .padding()
         .frame(width: 320)
         .onAppear {
-            micVolume = volumeService.getInputVolume() ?? 1.0
+            micVolume = volumeService?.getInputVolume() ?? 1.0
         }
     }
 
@@ -133,12 +141,12 @@ struct AudioLevelPopoverView: View {
             Text("Input Volume")
                 .font(.subheadline)
 
-            if volumeService.isVolumeControlAvailable() {
+            if let volumeService, volumeService.isVolumeControlAvailable() {
                 HStack {
                     Image(systemName: "speaker.wave.1.fill")
                         .foregroundStyle(.secondary)
                         .font(.caption)
-                    Slider(value: $micVolume, in: 0...1, step: 0.01)
+                    Slider(value: $micVolume, in: 0...1, step: 0.05)
                         .onChange(of: micVolume) { _, newValue in
                             volumeService.setInputVolume(newValue)
                         }
@@ -164,7 +172,8 @@ struct AudioLevelPopoverView: View {
     AudioLevelPopoverView(
         audioLevels: (0..<20).map { _ in Float.random(in: 0...0.8) },
         isActive: true,
-        silenceThreshold: 0.2
+        silenceThreshold: 0.2,
+        volumeService: nil
     )
 }
 
