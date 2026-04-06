@@ -225,6 +225,7 @@ struct FinalizedLinesTests {
     }
 }
 
+@MainActor
 struct AutoReplacementTests {
 
     @Test func codableRoundTrip() throws {
@@ -651,11 +652,9 @@ struct LanguageSwapTests {
         let vm = makeTestViewModel()
         vm.supportedSourceLocales = []
         let oldSource = vm.sourceLocaleIdentifier
-        let oldTarget = vm.targetLanguageIdentifier
         vm.swapLanguages()
         // No candidates found, swap should be no-op
         #expect(vm.sourceLocaleIdentifier == oldSource)
-        // Target may or may not change depending on old source lang code
     }
 
     @Test func swapWithMatchingLocalesSwapsCorrectly() {
