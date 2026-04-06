@@ -218,11 +218,15 @@ struct AppMenuCommands: Commands {
                     let reserved = await AssetInventory.reservedLocales
                     let max = AssetInventory.maximumReservedLocales
                     logger.debug("Reserved locales (\(reserved.count)/\(max)):")
-                    for locale in reserved {
-                        let status = await AssetInventory.status(forModules: [
-                            SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
-                        ])
-                        logger.debug("  - \(locale.identifier): \(String(describing: status))")
+                    if reserved.isEmpty {
+                        logger.debug("  (none)")
+                    } else {
+                        for locale in reserved {
+                            let status = await AssetInventory.status(forModules: [
+                                SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
+                            ])
+                            logger.debug("  - \(locale.identifier): \(String(describing: status))")
+                        }
                     }
                 }
             }

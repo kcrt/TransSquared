@@ -42,7 +42,7 @@ final class AudioRecordingService: @unchecked Sendable {
 
     /// URL of the temporary recording file.
     var recordingURL: URL? {
-        lock.withLock { $0.recordingURL }
+        lock.withLockUnchecked { $0.recordingURL }
     }
 
     /// AAC output settings used when creating the writer input.
@@ -61,7 +61,7 @@ final class AudioRecordingService: @unchecked Sendable {
             .appendingPathExtension("m4a")
 
         let writer = try AVAssetWriter(outputURL: url, fileType: .m4a)
-        lock.withLock { state in
+        lock.withLockUnchecked { state in
             state.assetWriter = writer
             state.recordingURL = url
         }
@@ -79,7 +79,7 @@ final class AudioRecordingService: @unchecked Sendable {
     ///
     /// Must be called from a serial queue (the capture queue).
     func appendSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        let (input, isNew): (AVAssetWriterInput?, Bool) = lock.withLock { state in
+        let (input, isNew): (AVAssetWriterInput?, Bool) = lock.withLockUnchecked { state in
             guard let writer = state.assetWriter else { return (nil, false) }
 
             if state.writerInput == nil {
@@ -114,7 +114,7 @@ final class AudioRecordingService: @unchecked Sendable {
     /// Marks the writer input as finished so the asset writer can finalize.
     /// Must be called from the capture queue before `stopRecording()`.
     func finishWriterInput() {
-        lock.withLock { state in
+        lock.withLockUnchecked { state in
             state.writerInput?.markAsFinished()
             state.writerInput = nil
         }
@@ -123,7 +123,7 @@ final class AudioRecordingService: @unchecked Sendable {
     /// Finalizes the recording and returns the file URL on success, or nil on failure.
     @discardableResult
     func stopRecording() async -> URL? {
-        let (writer, url) = lock.withLock { state -> (AVAssetWriter?, URL?) in
+        let (writer, url) = lock.withLockUnchecked { state -> (AVAssetWriter?, URL?) in
             let w = state.assetWriter
             let u = state.recordingURL
             state.assetWriter = nil
@@ -143,7 +143,7 @@ final class AudioRecordingService: @unchecked Sendable {
 
     /// Removes the temporary recording file from disk.
     func cleanup() {
-        let url = lock.withLock { state -> URL? in
+        let url = lock.withLockUnchecked { state -> URL? in
             let u = state.recordingURL
             state.recordingURL = nil
             state.assetWriter = nil

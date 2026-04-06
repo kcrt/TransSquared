@@ -14,10 +14,21 @@ require a download, so users know before starting a session.
 | API | Type | Returns |
 |-----|------|---------|
 | `SpeechTranscriber.supportedLocales` | async | All locales (installed + downloadable) |
-| `SpeechTranscriber.installedLocales` | async | Only locales with models already on device |
+| `AssetInventory.status(forModules:)` | async | `.installed`, `.supported`, `.downloading`, or `.unsupported` |
 
-Both are fetched in parallel during `loadSupportedLocales()` using `async let`.
-The difference between the two sets determines which source languages need downloading.
+`loadSupportedLocales()` fetches `supportedLocales`, then checks each locale's
+actual on-device installation status via `AssetInventory.status(forModules:)` using
+a `SpeechTranscriber` configured with the `.timeIndexedProgressiveTranscription`
+preset — the same preset used at session start.
+
+> **Why not `SpeechTranscriber.installedLocales`?**
+> `installedLocales` is a static property that does not account for the specific
+> preset. It may report a locale as installed even when the model required for
+> `.timeIndexedProgressiveTranscription` has not been downloaded. This caused a
+> mismatch where the UI showed no cloud icon (appears installed) but session start
+> failed with `.supported` status (not actually installed for the required preset).
+> Using `AssetInventory.status` with the exact module configuration ensures the UI
+> and session start use the same source of truth.
 
 ### Translation (Target Languages)
 
@@ -57,9 +68,11 @@ var translationPreparationConfig: TranslationSession.Configuration?
 ```
 ContentView .task
   └── loadSupportedLocales()
-        ├── async let supportedLocales   ← all source locales
-        ├── async let installedLocales   ← downloaded source locales only
-        ├── installedSourceLocaleIdentifiers = Set(installed.map(\.identifier))
+        ├── supportedSourceLocales = await SpeechTranscriber.supportedLocales
+        ├── installedSourceLocaleIdentifiers = await checkInstalledLocales(...)
+        │     └── for each locale:
+        │           AssetInventory.status(forModules: [SpeechTranscriber(locale, preset: .timeIndexedProgressiveTranscription)])
+        │           → .installed ⇒ add to set
         └── updateTargetLanguages()
               └── for each supported target:
                     status = await availability.status(from:to:)
@@ -71,7 +84,8 @@ ContentView .task
 ```
 stopSession()
   └── refreshSourceLocaleInstallStatus()
-        └── installedSourceLocaleIdentifiers = Set(await SpeechTranscriber.installedLocales...)
+        └── installedSourceLocaleIdentifiers = await checkInstalledLocales(...)
+              └── (same AssetInventory.status check as startup)
 ```
 
 Models may have been downloaded during the session (the `TranscriptionManager`

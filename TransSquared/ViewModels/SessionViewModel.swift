@@ -382,10 +382,13 @@ final class SessionViewModel {
 
     func loadSupportedLocales() async {
         logger.info("Loading supported locales...")
-        async let supported = SpeechTranscriber.supportedLocales
-        async let installed = SpeechTranscriber.installedLocales
-        supportedSourceLocales = await supported
-        installedSourceLocaleIdentifiers = Set(await installed.map(\.identifier))
+        supportedSourceLocales = await SpeechTranscriber.supportedLocales
+
+        // Check actual on-device installation status via AssetInventory using the
+        // same preset (timeIndexedProgressiveTranscription) that startSession() requires.
+        // SpeechTranscriber.installedLocales may report locales as installed even when
+        // the specific model for our preset has not been downloaded yet.
+        installedSourceLocaleIdentifiers = await checkInstalledLocales(supportedSourceLocales)
         logger.info("Found \(self.supportedSourceLocales.count) supported, \(self.installedSourceLocaleIdentifiers.count) installed source locales")
         await updateTargetLanguages()
 
@@ -401,8 +404,21 @@ final class SessionViewModel {
 
     /// Refreshes only the installed-status set for source locales (lightweight, no full reload).
     func refreshSourceLocaleInstallStatus() async {
-        let installed = await SpeechTranscriber.installedLocales
-        installedSourceLocaleIdentifiers = Set(installed.map(\.identifier))
+        installedSourceLocaleIdentifiers = await checkInstalledLocales(supportedSourceLocales)
+    }
+
+    /// Checks which locales have the timeIndexedProgressiveTranscription model
+    /// actually installed on-device via AssetInventory.
+    private func checkInstalledLocales(_ locales: [Locale]) async -> Set<String> {
+        var installed: Set<String> = []
+        for locale in locales {
+            let transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
+            let status = await AssetInventory.status(forModules: [transcriber])
+            if status == .installed {
+                installed.insert(locale.identifier)
+            }
+        }
+        return installed
     }
 
     // MARK: - Session Control

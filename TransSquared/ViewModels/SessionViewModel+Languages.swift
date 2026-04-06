@@ -16,22 +16,23 @@ extension SessionViewModel {
               !downloadingSourceLocaleIdentifiers.contains(locale.identifier) else { return }
         downloadingSourceLocaleIdentifiers.insert(locale.identifier)
         let localeID = locale.identifier
+        let log = logger
         let task = Task.detached {
             let transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
             let succeeded: Bool
             do {
                 if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
                     try Task.checkCancellation()
-                    logger.info("Starting speech asset download for \(localeID)")
+                    log.info("Starting speech asset download for \(localeID)")
                     try await request.downloadAndInstall()
-                    logger.info("Speech asset download completed for \(localeID)")
+                    log.info("Speech asset download completed for \(localeID)")
                 }
                 succeeded = true
             } catch is CancellationError {
-                logger.info("Speech asset download cancelled for \(localeID)")
+                log.info("Speech asset download cancelled for \(localeID)")
                 succeeded = false
             } catch {
-                logger.error("Speech asset download failed for \(localeID): \(error.localizedDescription)")
+                log.error("Speech asset download failed for \(localeID): \(error.localizedDescription)")
                 succeeded = false
             }
             let didSucceed = succeeded
