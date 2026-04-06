@@ -37,55 +37,18 @@ extension SessionViewModel {
     /// Triggers a proactive translation model download for the given target language.
     /// Uses `TranslationSession.prepareTranslation()` via the `.translationTask()` modifier in ContentView.
     /// Unlike speech models (which download silently), translation models require user confirmation via a system dialog.
-    ///
-    /// The config change is deferred to avoid colliding with other SwiftUI state changes
-    /// in the same run-loop cycle, which can cause the system download sheet to auto-dismiss
-    /// (Apple Developer Forums thread 783311).
-    ///
-    /// If the `translationd` daemon crashes (Code=14), the `.translationTask()` closure may never fire.
-    /// A timeout detects this and retries once by cycling the config through nil.
+    /// If the download dialog does not appear, the user can install models manually from
+    /// System Settings > General > Language & Region > Translation Languages.
     func prepareTranslationModelIfNeeded(for languageIdentifier: String) {
-        // Already installed for the current source→target pair
         guard targetLanguageDownloadStatus[languageIdentifier] != true else { return }
-
-        translationPreparationRetryTask?.cancel()
 
         let targetLang = Locale.Language(identifier: languageIdentifier)
         let source = sourceLocale.language
         logger.info("Requesting translation model preparation for '\(languageIdentifier)' (source: \(self.sourceLocaleIdentifier))")
 
-        // Clear config immediately so SwiftUI detects a nil→non-nil transition.
+        // Clear then set config so SwiftUI detects a nil→non-nil transition.
         translationPreparationConfig = nil
-
-        // Defer the config assignment to the next run-loop cycle so that other state
-        // changes from the calling context (e.g. targetLanguageIdentifiers, errorMessage)
-        // have settled before the .translationTask() modifier fires the download sheet.
-        translationPreparationRetryTask = Task { @MainActor [weak self] in
-            // Yield to let the current SwiftUI update cycle complete.
-            try? await Task.sleep(for: .milliseconds(100))
-            guard let self, !Task.isCancelled else { return }
-
-            self.translationPreparationConfig = TranslationSession.Configuration(source: source, target: targetLang)
-
-            // Timeout: if handleTranslationPreparationSession doesn't fire (clears config)
-            // within a few seconds, the translationd daemon likely crashed. Retry once.
-            try? await Task.sleep(for: .seconds(5))
-            guard !Task.isCancelled else { return }
-            guard self.translationPreparationConfig != nil else { return }
-            logger.warning("Translation preparation session not provided within timeout — retrying for '\(languageIdentifier)'")
-            self.translationPreparationConfig = nil
-            try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled else { return }
-            self.translationPreparationConfig = TranslationSession.Configuration(source: source, target: targetLang)
-
-            // Second timeout: if still no session, give up
-            try? await Task.sleep(for: .seconds(5))
-            guard !Task.isCancelled else { return }
-            if self.translationPreparationConfig != nil {
-                logger.warning("Translation preparation failed after retry for '\(languageIdentifier)' — translationd may be unavailable")
-                self.translationPreparationConfig = nil
-            }
-        }
+        translationPreparationConfig = TranslationSession.Configuration(source: source, target: targetLang)
     }
 
     func swapLanguages() {
@@ -184,6 +147,18 @@ extension SessionViewModel {
         }
 
         logger.debug("updateTargetLanguages: final target='\(self.targetLanguageIdentifier)'")
+    }
+
+    /// Refreshes only the installed-status for translation models (lightweight, no full reload).
+    /// Called when the app becomes active so that models installed via System Settings are detected.
+    func refreshTranslationInstallStatus() async {
+        let availability = LanguageAvailability()
+        var statusMap: [String: Bool] = [:]
+        for lang in supportedTargetLanguages {
+            let status = await availability.status(from: sourceLocale.language, to: lang)
+            statusMap[lang.minimalIdentifier] = (status == .installed)
+        }
+        targetLanguageDownloadStatus = statusMap
     }
 
     // MARK: - Target Language Count

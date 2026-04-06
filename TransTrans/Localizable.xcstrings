@@ -1283,7 +1283,7 @@
         }
       }
     },
-    "Translation model for %@ is not installed. Please select the language from the menu to download, or install it from System Settings > General > Language & Region > Translation Languages." : {
+    "Translation model for %@ is not installed. Please install it from System Settings > General > Language & Region > Translation Languages." : {
       "comment" : "Error shown when translation model is not installed at session start"
     },
     "Translation will appear here" : {

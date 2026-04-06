@@ -190,9 +190,6 @@ final class SessionViewModel {
     /// Configuration for proactively downloading translation models via `prepareTranslation()`.
     /// Set by `prepareTranslationModelIfNeeded(for:)`, consumed by the `.translationTask()` in ContentView.
     var translationPreparationConfig: TranslationSession.Configuration?
-    /// Timeout task that retries translation preparation if the `.translationTask()` closure is never called
-    /// (e.g. when the `translationd` daemon crashes before providing a session).
-    var translationPreparationRetryTask: Task<Void, Never>?
 
     // Microphone selection
     var availableMicrophones: [AVCaptureDevice] = []
@@ -467,21 +464,13 @@ final class SessionViewModel {
             )
             logger.info("Translation status for \(self.sourceLocaleIdentifier)→\(targetLangId): \(String(describing: translationStatus))")
             if translationStatus != .installed {
-                // LanguageAvailability.status() may report .supported even when the model is usable
-                // (e.g. shared models across different source languages). Trust the preparation
-                // result if it already confirmed readiness via session.isReady.
-                if targetLanguageDownloadStatus[targetLangId] == true {
-                    logger.info("LanguageAvailability reports .supported for \(targetLangId) but preparation confirmed readiness — proceeding")
-                } else {
-                    let langName = Locale.current.localizedString(forIdentifier: targetLangId) ?? targetLangId
-                    logger.info("Session start aborted: translation model not installed for \(targetLangId)")
-                    errorMessage = String(
-                        localized: "Translation model for \(langName) is not installed. Please select the language from the menu to download, or install it from System Settings > General > Language & Region > Translation Languages.",
-                        comment: "Error shown when translation model is not installed at session start"
-                    )
-                    prepareTranslationModelIfNeeded(for: targetLangId)
-                    return
-                }
+                let langName = Locale.current.localizedString(forIdentifier: targetLangId) ?? targetLangId
+                logger.info("Session start aborted: translation model not installed for \(targetLangId)")
+                errorMessage = String(
+                    localized: "Translation model for \(langName) is not installed. Please install it from System Settings > General > Language & Region > Translation Languages.",
+                    comment: "Error shown when translation model is not installed at session start"
+                )
+                return
             }
         }
 

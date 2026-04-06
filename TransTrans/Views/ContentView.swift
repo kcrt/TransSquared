@@ -59,6 +59,11 @@ struct ContentView: View {
             setWindowLevel(viewModel.isAlwaysOnTop)
             viewModel.refreshMicrophones()
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task {
+                await viewModel.refreshTranslationInstallStatus()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didDeminiaturizeNotification)) { notification in
             // When the main window is restored from Dock, switch back to normal mode
             if let window = notification.object as? NSWindow,

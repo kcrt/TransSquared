@@ -8,7 +8,7 @@ preparation, causing the download dialog to flash briefly and disappear without
 completing the download. The method does not throw an error — it returns normally
 but `session.isReady` remains `false`.
 
-**Observed**: macOS 26.2 (Tahoe), Xcode 26 beta
+**Observed**: macOS 26.2–26.4 (Tahoe), Xcode 26 beta
 **Affected pair (confirmed)**: `ko_KR→th` (Korean → Thai)
 **Working pair (confirmed)**: `ja_JP→th` (Japanese → Thai)
 
@@ -44,6 +44,60 @@ should be installed (proven by `ko→ja` and `ja→th` working). Yet
 
 This suggests the issue is NOT about missing models but rather a **framework bug
 in pair management or model composition** for `ko→th` specifically.
+
+## Standalone Reproduction (CLI test)
+
+A standalone Swift script (`docs/test_ko_th_translation.swift`) confirms the issue
+outside of SwiftUI, eliminating any SwiftUI state change interference.
+
+**Test environment**: macOS 26.4 (Build 25E246), 2026-04-06
+
+### Results
+
+```
+--- LanguageAvailability.status() ---
+  ✅ Korean → Japanese (control): installed
+  ✅ Japanese → Thai (control): installed
+  ⚠️ Korean → Thai (problem pair): supported
+
+--- English pivot pairs (all installed) ---
+  ✅ Korean → English: installed
+  ✅ English → Korean: installed
+  ✅ Thai → English: installed
+  ✅ English → Thai: installed
+  ✅ Japanese → English: installed
+  ✅ English → Japanese: installed
+
+--- Translation attempts ---
+  [Korean → Japanese]  ✅ "안녕하세요. 오늘 날씨가 좋습니다." → "こんにちは。今日は天気がいいです。"
+  [Japanese → Thai]    ✅ "こんにちは。今日はいい天気です。" → "สวัสดี วันนี้เป็นวันที่ดี"
+  [Korean → Thai]      ❌ TranslationError(cause: .notInstalled, sourceLanguage: nil, targetLanguage: nil)
+                          Error domain: Translation.TranslationError, code: 1
+```
+
+### Key findings from CLI test
+
+1. **All six English pivot pairs are `.installed`** — `ko↔en` and `en↔th` both work
+2. `ko→th` session creates successfully (`sourceLanguage=ko`, `targetLanguage=th`)
+   but `isReady=false`, `canRequestDownloads=false`
+3. `translate()` throws `TranslationError.notInstalled` (code 1) — not
+   `TranslationErrorDomain Code=14` (the daemon crash seen via `.translationTask()`)
+4. Error's `sourceLanguage: nil, targetLanguage: nil` — the error object does not
+   populate language fields for `notInstalled` cause (these fields are used for
+   language detection errors, not installation errors)
+5. This reproduces **without SwiftUI**, ruling out state-change-induced sheet dismissal
+   as the sole cause
+
+### Two distinct failure modes
+
+| Context | Session source | Error | Mechanism |
+|---------|---------------|-------|-----------|
+| SwiftUI `.translationTask()` | Framework-provided | `TranslationErrorDomain Code=14` (daemon crash) | `prepareTranslation()` returns without throwing, `isReady=false` |
+| CLI `TranslationSession(installedSource:)` | Direct init | `TranslationError.notInstalled` (code 1) | `translate()` throws because `canRequestDownloads=false` and pair not installed |
+
+The underlying issue is the same — the framework does not recognize `ko→th` as
+an installed pair — but the error surfaces differently depending on how the
+session was created.
 
 ## Observed Behavior
 
@@ -112,36 +166,34 @@ Reported that remote UI finished but didn't get finished configuration,
 
 ## App-Side Mitigations
 
-### 1. `session.isReady` verification
+> **2026-04-06 Simplification**: The retry/timeout mechanisms (previously mitigations 1–4)
+> were removed in favor of a simpler approach. Since manual download from System Settings
+> reliably resolves all cases including the `ko→th` bug, the app now attempts
+> `prepareTranslation()` once and falls back to directing the user to System Settings.
 
-After `prepareTranslation()` returns, `session.isReady` is checked to prevent falsely
-marking the model as installed. (`SessionViewModel+Translation.swift`)
+### 1. Single `prepareTranslation()` attempt
 
-### 2. Retry within preparation session
+When the user selects a target language, `prepareTranslationModelIfNeeded()` sets
+`translationPreparationConfig` to trigger the `.translationTask()` modifier. The handler
+calls `session.prepareTranslation()` once. If it succeeds, the model is marked as
+installed. If it fails (e.g. daemon crash for `ko→th`), the error is logged and no
+retry is attempted. (`SessionViewModel+Languages.swift`, `SessionViewModel+Translation.swift`)
 
-If `prepareTranslation()` returns but `isReady=false`, the handler retries up to 2 times
-with a 1-second delay. (`SessionViewModel+Translation.swift`)
+### 2. Session start validation
 
-### 3. Timeout-based retry for session creation
+`startSession()` checks `LanguageAvailability.status(from:to:)` for each target language.
+If the status is not `.installed`, the session is blocked with an error message directing
+the user to System Settings > General > Language & Region > Translation Languages.
+(`SessionViewModel.swift`)
 
-If the `.translationTask()` closure never fires (daemon crashes before providing a
-session), a timeout task detects this after 5 seconds, clears the config, and retries
-once. (`SessionViewModel+Languages.swift`)
+### 3. Status refresh on app activation
 
-### 4. `targetLanguageDownloadStatus` fallback in `startSession()`
+When the app becomes active (e.g. after returning from System Settings),
+`refreshTranslationInstallStatus()` re-checks `LanguageAvailability.status()` for all
+target languages and updates the UI accordingly. (`ContentView.swift`,
+`SessionViewModel+Languages.swift`)
 
-`startSession()` checks `LanguageAvailability.status(from:to:)` but also trusts
-`targetLanguageDownloadStatus` if a preparation session previously confirmed readiness
-via `isReady`. This handles cases where the API reports `.supported` but the model
-is actually usable (shared models). (`SessionViewModel.swift`)
-
-### 5. Error message with manual download guidance
-
-When `startSession()` blocks due to an uninstalled translation model, the error message
-directs the user to System Settings > General > Language & Region > Translation Languages
-as a manual download fallback. (`SessionViewModel.swift`)
-
-## Workaround for Users
+## Workaround for Users (Confirmed Working)
 
 If `prepareTranslation()` fails to show the download dialog:
 
@@ -151,6 +203,13 @@ If `prepareTranslation()` fails to show the download dialog:
 
 This bypasses `prepareTranslation()` entirely by installing the model at the OS level.
 
+**Confirmed 2026-04-06**: After manually downloading the Korean→Thai model via
+System Settings, `LanguageAvailability.status(from: ko, to: th)` changes from
+`.supported` to `.installed`, and `translate()` succeeds. This proves that:
+- The translation engine itself works correctly for `ko→th`
+- Only the `prepareTranslation()` download flow is broken for this pair
+- The workaround is reliable
+
 ## Root Cause Hypothesis
 
 The `translationd` daemon crashes specifically when preparing the `ko→th` pair.
@@ -158,16 +217,21 @@ The crash occurs after the download dialog is presented but before the user can
 interact with it. **This is NOT a missing model issue** — both the Korean and
 Thai models are installed and functional for other pairs (`ko→ja`, `ja→th`).
 
-This is likely a bug in the Translation framework's pair composition logic or
-XPC communication for certain non-trivial pivot combinations.
+This is likely a bug in the Translation framework's **`prepareTranslation()` download
+flow** for certain non-trivial pivot combinations. The translation engine itself works
+correctly once the model is manually installed via System Settings.
 
 Evidence:
 - `ko→ja` works → Korean model is installed and functional
 - `ja→th` works → Thai model is installed and functional
 - `ko→th` reports `.supported` despite both models being present
-- `canRequestDownloads=true` confirms the session is properly configured
+- All six English pivot pairs (`ko↔en`, `en↔th`, `ja↔en`) report `.installed`
+- `canRequestDownloads=true` confirms the session is properly configured (via `.translationTask()`)
 - The dialog briefly appears, proving the UI path is initiated
 - The daemon crashes consistently for this pair (Code=14, connection interrupted)
+- CLI reproduction (no SwiftUI) also fails with `TranslationError.notInstalled` (code 1)
+- **Manual download via System Settings resolves the issue** — `ko→th` translates
+  correctly after manual install, confirming the bug is in `prepareTranslation()` only
 
 ## Known Issue: State Changes Dismiss the Download Sheet
 
@@ -212,6 +276,16 @@ What is NOT documented:
 However, using `translate()` as a fallback during active transcription would cause
 repeated download dialogs for each translation request, which is unacceptable UX.
 
+### `TranslationSession(installedSource:target:)` — non-SwiftUI session
+
+- Creates a session without SwiftUI's `.translationTask()` modifier
+- `canRequestDownloads` is always `false` — cannot trigger download dialogs
+- If the pair is not `.installed`, `translate()` throws `TranslationError.notInstalled`
+  (code 1, domain `Translation.TranslationError`)
+- The error's `sourceLanguage` and `targetLanguage` fields are `nil` for `notInstalled`
+  cause — these fields are only populated for language detection errors
+- Useful for testing: confirms whether a pair works without SwiftUI interference
+
 ### `LanguageAvailability.status(from:to:)` — pair-dependent
 
 - Returns `.installed`, `.supported`, or `.unsupported`
@@ -221,21 +295,26 @@ repeated download dialogs for each translation request, which is unacceptable UX
 
 ## Related Files
 
-| File | Mitigation |
-|------|------------|
-| `ViewModels/SessionViewModel+Translation.swift` | `isReady` check, retry within session |
-| `ViewModels/SessionViewModel+Languages.swift` | Timeout-based retry, config cycling |
-| `ViewModels/SessionViewModel.swift` | `targetLanguageDownloadStatus` fallback, error message |
-| `Views/ContentView.swift` | `TranslationPreparation` modifier |
+| File | Role |
+|------|------|
+| `ViewModels/SessionViewModel+Translation.swift` | Single `prepareTranslation()` call |
+| `ViewModels/SessionViewModel+Languages.swift` | `prepareTranslationModelIfNeeded()`, `refreshTranslationInstallStatus()` |
+| `ViewModels/SessionViewModel.swift` | Session start validation, error message |
+| `Views/ContentView.swift` | `TranslationPreparation` modifier, app-activation refresh |
+| `docs/test_ko_th_translation.swift` | Standalone CLI reproduction script |
 
 ## Recommendation
 
 File an Apple Feedback report including:
-- The `TranslationErrorDomain Code=14` console logs
-- Reproduction steps (`ko_KR→th` via `prepareTranslation()`)
-- macOS version and device info
+- The `TranslationErrorDomain Code=14` console logs (via `.translationTask()`)
+- The `TranslationError.notInstalled` (code 1) error (via `installedSource` init)
+- Reproduction steps (`ko_KR→th` via both SwiftUI and CLI)
+- CLI reproduction script (`docs/test_ko_th_translation.swift`)
+- macOS version: 26.4 (Build 25E246) — also observed on 26.2
 - Note that `ja_JP→th` works but `ko_KR→th` does not
 - Note that `ko→ja` and `ja→th` both work, proving the individual models are installed
+- Note that all six English pivot pairs (`ko↔en`, `en↔th`, `ja↔en`) are `.installed`
 - Note that `LanguageAvailability.status(from: ko, to: th)` returns `.supported`
   despite both models being available
-- Note that `canRequestDownloads=true` but dialog is dismissed by daemon crash
+- Note that `canRequestDownloads=true` but dialog is dismissed by daemon crash (SwiftUI path)
+- Note that this reproduces without SwiftUI, ruling out state-change interference

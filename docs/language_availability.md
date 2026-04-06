@@ -166,13 +166,13 @@ On completion, `targetLanguageDownloadStatus[langId]` is set to `true`.
 
 **On session start**: `startSession()` checks `LanguageAvailability.status(from:to:)`
 for every active target language (source→target pair). If any target is not
-`.installed`, the session is aborted with an error message and
-`prepareTranslationModelIfNeeded` is triggered for the first missing language.
+`.installed`, the session is aborted with an error message directing the user to
+System Settings > General > Language & Region > Translation Languages.
 
 | Status | Behavior |
 |--------|----------|
 | `.installed` | Session proceeds normally |
-| `.supported` | Error: "Translation model for X is not installed." + triggers preparation download |
+| `.supported` | Error: "Translation model for X is not installed." with System Settings guidance |
 | `.unsupported` | Filtered out by `updateTargetLanguages()`, should not occur |
 
 **Important**: Translation availability is **pair-dependent** — a model installed
@@ -188,42 +188,43 @@ Translation framework downloads show a system confirmation dialog via
 
 ```
 handleTranslationPreparationSession(session)
-  └── for attempt in 1...maxRetries:
-        session.prepareTranslation()   ← shows system download dialog if needed
-        └── if session.isReady:
-                targetLanguageDownloadStatus[langId] = true → done
-            else:
-                wait 1s → retry
-  └── if all retries exhausted: log warning
+  └── session.prepareTranslation()   ← shows system download dialog if needed
+        ├── success: targetLanguageDownloadStatus[langId] = true
+        └── failure: log error (user can install manually from System Settings)
+  └── translationPreparationConfig = nil
 ```
-
-**Note**: `prepareTranslation()` returns without prompting if the model is "already
-installed or in the middle of downloading". It also returns without throwing when
-the `translationd` daemon crashes. To avoid falsely marking a model as installed,
-`session.isReady` is checked after the call returns, with retries for transient
-daemon failures.
 
 A separate `.translationTask()` modifier (`TranslationPreparation` in `ContentView`)
 is dedicated to proactive model preparation. It is driven by
 `translationPreparationConfig` and is independent of the per-slot translation tasks.
 
-### Timeout-Based Session Retry
+If `prepareTranslation()` fails (e.g. `translationd` daemon crash for certain language
+pairs like `ko→th`), the user can install models manually from System Settings >
+General > Language & Region > Translation Languages. See
+`docs/TRANSLATION_MODEL_PROBLEM.md` for details on known daemon crash issues.
 
-If the `translationd` daemon crashes before providing a `TranslationSession`, the
-`.translationTask()` closure never fires. `prepareTranslationModelIfNeeded()` starts
-a timeout task that detects this after 5 seconds and retries by cycling the config
-through nil→re-set. If the retry also times out, the config is cleared.
+### App Activation Refresh
 
-See `docs/TRANSLATION_MODEL_PROBLEM.md` for details on known daemon crash issues.
+```
+ContentView .onReceive(NSApplication.didBecomeActiveNotification)
+  └── refreshTranslationInstallStatus()
+        └── for each supported target:
+              status = await availability.status(from:to:)
+              targetLanguageDownloadStatus[id] = (status == .installed)
+```
+
+When the user returns from System Settings after installing a translation model,
+the app refreshes `targetLanguageDownloadStatus` so the cloud icon disappears
+and the session start check passes.
 
 ## Related Files
 
 | File | Role |
 |------|------|
 | `ViewModels/SessionViewModel.swift` | `installedSourceLocaleIdentifiers`, `downloadingSourceLocaleIdentifiers`, `targetLanguageDownloadStatus`, `translationPreparationConfig`, `loadSupportedLocales()`, `refreshSourceLocaleInstallStatus()`, `startSession()` speech + translation asset checks |
-| `ViewModels/SessionViewModel+Languages.swift` | `updateTargetLanguages()` — stores translation model status; `downloadSpeechAssetsIfNeeded(for:)` — triggers speech download; `prepareTranslationModelIfNeeded(for:)` — triggers translation preparation |
-| `ViewModels/SessionViewModel+Translation.swift` | `handleTranslationSession()` — marks language as installed; `handleTranslationPreparationSession()` — proactive download via `prepareTranslation()` |
-| `Views/ContentView.swift` | `TranslationTaskSlots` — per-slot `.translationTask()` for actual translations; `TranslationPreparation` — `.translationTask()` for proactive model download |
+| `ViewModels/SessionViewModel+Languages.swift` | `updateTargetLanguages()` — stores translation model status; `downloadSpeechAssetsIfNeeded(for:)` — triggers speech download; `prepareTranslationModelIfNeeded(for:)` — triggers translation preparation; `refreshTranslationInstallStatus()` — refreshes translation model status on app activation |
+| `ViewModels/SessionViewModel+Translation.swift` | `handleTranslationSession()` — marks language as installed; `handleTranslationPreparationSession()` — single `prepareTranslation()` call |
+| `Views/ContentView.swift` | `TranslationTaskSlots` — per-slot `.translationTask()` for actual translations; `TranslationPreparation` — `.translationTask()` for proactive model download; app-activation refresh |
 | `Views/HelperViews.swift` | `CheckmarkLabel` — cloud icon rendering |
 | `Views/ContentView+Toolbar.swift` | Toolbar language pickers with `isDownloaded`, triggers speech/translation download on selection |
 | `Views/MenuCommands.swift` | Menu bar language menus with `isDownloaded`, triggers speech/translation download on selection |
