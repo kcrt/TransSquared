@@ -6,7 +6,6 @@ struct SubtitleOverlayView: View {
     var lines: [TranscriptLine]
     var fontSize: CGFloat
     var now: Date
-    var onDismiss: (() -> Void)?
 
     /// Duration in seconds before a finalized subtitle line disappears.
     private static let expirationInterval: TimeInterval = 30
@@ -59,11 +58,7 @@ struct SubtitleOverlayView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onDismiss?()
-        }
         .accessibilityLabel("Subtitle overlay")
-        .accessibilityHint("Tap to dismiss")
+        .accessibilityHint("Press Command-D to dismiss")
     }
 }

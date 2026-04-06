@@ -48,10 +48,8 @@ final class SubtitleWindowController {
         panel.hasShadow = false
         panel.level = .floating  // Above normal windows but below system UI
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.ignoresMouseEvents = false
+        panel.ignoresMouseEvents = true
         panel.isMovableByWindowBackground = false
-        // Allow the panel to accept mouse events for text selection but not become key
-        panel.becomesKeyOnlyIfNeeded = true
 
         let hosting = makeSubtitleHostingView()
         self.hostingView = hosting
@@ -137,8 +135,7 @@ final class SubtitleWindowController {
         hostingView.rootView = SubtitleOverlayView(
             lines: viewModel.translationLines(forSlot: 0),
             fontSize: viewModel.fontSize,
-            now: Date(),
-            onDismiss: { [weak self] in self?.onDismiss?() }
+            now: Date()
         )
     }
 
@@ -147,8 +144,7 @@ final class SubtitleWindowController {
             rootView: SubtitleOverlayView(
                 lines: viewModel?.translationLines(forSlot: 0) ?? [],
                 fontSize: viewModel?.fontSize ?? 16,
-                now: Date(),
-                onDismiss: { [weak self] in self?.onDismiss?() }
+                now: Date()
             )
         )
     }
