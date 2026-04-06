@@ -1,6 +1,9 @@
 import SwiftUI
 import AVFoundation
 import Speech
+import os
+
+private let logger = Logger.app("MenuCommands")
 
 // MARK: - App Menu Commands
 
@@ -179,6 +182,8 @@ struct AppMenuCommands: Commands {
         CommandGroup(replacing: .help) {
             Link("TransTrans Support",
                  destination: URL(staticString: "https://github.com/kcrt/TransTrans"))
+            Link("Report an Issue (GitHub)",
+                 destination: URL(staticString: "https://github.com/kcrt/TransTrans/issues"))
         }
 
         #if DEBUG
@@ -187,23 +192,23 @@ struct AppMenuCommands: Commands {
                 Task {
                     let keepLanguageCodes: Set<String> = ["ja", "en"]
                     let reserved = await AssetInventory.reservedLocales
-                    print("[DEBUG] Releasing speech models (reserved: \(reserved.count))...")
+                    logger.debug("Releasing speech models (reserved: \(reserved.count))...")
                     var releasedCount = 0
                     for locale in reserved {
                         let langCode = locale.language.languageCode?.identifier ?? ""
                         if !keepLanguageCodes.contains(langCode) {
                             let released = await AssetInventory.release(reservedLocale: locale)
-                            print("[DEBUG]   \(locale.identifier): \(released ? "released" : "not reserved")")
+                            logger.debug("  \(locale.identifier): \(released ? "released" : "not reserved")")
                             if released { releasedCount += 1 }
                         } else {
-                            print("[DEBUG]   \(locale.identifier): kept")
+                            logger.debug("  \(locale.identifier): kept")
                         }
                     }
-                    print("[DEBUG] Released \(releasedCount) locale(s)")
+                    logger.debug("Released \(releasedCount) locale(s)")
                     // Reload supported locales and install status
                     if let vm = viewModel {
                         await vm.loadSupportedLocales()
-                        print("[DEBUG] Reloaded supported locales (installed: \(vm.installedSourceLocaleIdentifiers.count))")
+                        logger.debug("Reloaded supported locales (installed: \(vm.installedSourceLocaleIdentifiers.count))")
                     }
                 }
             }
@@ -212,12 +217,12 @@ struct AppMenuCommands: Commands {
                 Task {
                     let reserved = await AssetInventory.reservedLocales
                     let max = AssetInventory.maximumReservedLocales
-                    print("[DEBUG] Reserved locales (\(reserved.count)/\(max)):")
+                    logger.debug("Reserved locales (\(reserved.count)/\(max)):")
                     for locale in reserved {
                         let status = await AssetInventory.status(forModules: [
                             SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
                         ])
-                        print("  - \(locale.identifier): \(status)")
+                        logger.debug("  - \(locale.identifier): \(String(describing: status))")
                     }
                 }
             }
@@ -231,23 +236,7 @@ struct AppMenuCommands: Commands {
     private var sourceLanguageMenu: some View {
         Menu("Source Language") {
             if let vm = viewModel {
-                ForEach(vm.supportedSourceLocales, id: \.identifier) { locale in
-                    Button {
-                        vm.sourceLocaleIdentifier = locale.identifier
-                        vm.downloadSpeechAssetsIfNeeded(for: locale)
-                        Task {
-                            await vm.updateTargetLanguages()
-                        }
-                    } label: {
-                        CheckmarkLabel(
-                            title: locale.localizedString(forIdentifier: locale.identifier)
-                                ?? locale.identifier,
-                            isSelected: vm.sourceLocaleIdentifier == locale.identifier,
-                            isDownloaded: vm.installedSourceLocaleIdentifiers.contains(locale.identifier),
-                            isDownloading: vm.downloadingSourceLocaleIdentifiers.contains(locale.identifier)
-                        )
-                    }
-                }
+                SourceLanguageMenuContent(viewModel: vm)
             }
         }
         .disabled(viewModel?.isSessionActive ?? true)
@@ -261,21 +250,7 @@ struct AppMenuCommands: Commands {
                     ? "Target Language"
                     : "Target Language \(slot + 1)"
                 ) {
-                    ForEach(vm.supportedTargetLanguages, id: \.minimalIdentifier) { language in
-                        Button {
-                            vm.targetLanguageIdentifiers[slot] = language.minimalIdentifier
-                            vm.prepareTranslationModelIfNeeded(for: language.minimalIdentifier)
-                        } label: {
-                            CheckmarkLabel(
-                                title: Locale.current.localizedString(
-                                    forIdentifier: language.minimalIdentifier
-                                ) ?? language.minimalIdentifier,
-                                isSelected: vm.targetLanguageIdentifiers[slot]
-                                    == language.minimalIdentifier,
-                                isDownloaded: vm.targetLanguageDownloadStatus[language.minimalIdentifier] == true
-                            )
-                        }
-                    }
+                    TargetLanguageMenuContent(viewModel: vm, slot: slot)
                 }
                 .disabled(vm.isSessionActive)
             }

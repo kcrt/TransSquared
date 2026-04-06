@@ -11,18 +11,39 @@ private let logger = Logger.app("AudioRecording")
 /// ensuring the AAC encoder receives the correct source format regardless
 /// of microphone hardware.
 ///
-/// Thread-safety is ensured by an `NSLock` guarding all mutable state.
-/// `appendSampleBuffer` and `finishWriterInput` are called from the serial
-/// capture queue, while `startRecording`, `stopRecording`, and `cleanup`
-/// are called from the MainActor.
+/// ## Threading Model
+///
+/// This class is `@unchecked Sendable` because it manages its own
+/// synchronization via `OSAllocatedUnfairLock`. All mutable state lives in
+/// a single `State` struct guarded by the lock:
+///
+/// | Method                | Called from            |
+/// |-----------------------|------------------------|
+/// | `startRecording()`    | MainActor              |
+/// | `appendSampleBuffer`  | Serial capture queue   |
+/// | `finishWriterInput()`  | Serial capture queue   |
+/// | `stopRecording()`     | MainActor (async)      |
+/// | `cleanup()`           | MainActor              |
+///
+/// > Note: Converting to a Swift `actor` is not viable because
+/// > `appendSampleBuffer` must run synchronously on the capture queue.
+/// > Actor methods are async, which would introduce unacceptable latency
+/// > for real-time audio processing.
 final class AudioRecordingService: @unchecked Sendable {
-    private let lock = NSLock()
-    private var assetWriter: AVAssetWriter?
-    /// URL of the temporary recording file.
-    private(set) var recordingURL: URL?
 
-    /// Writer input created lazily from the first buffer's format description.
-    private var writerInput: AVAssetWriterInput?
+    /// All mutable state guarded by `lock`.
+    private struct State {
+        var assetWriter: AVAssetWriter?
+        var recordingURL: URL?
+        var writerInput: AVAssetWriterInput?
+    }
+
+    private let lock = OSAllocatedUnfairLock(initialState: State())
+
+    /// URL of the temporary recording file.
+    var recordingURL: URL? {
+        lock.withLock { $0.recordingURL }
+    }
 
     /// AAC output settings used when creating the writer input.
     private static let outputSettings: [String: Any] = [
@@ -40,9 +61,9 @@ final class AudioRecordingService: @unchecked Sendable {
             .appendingPathExtension("m4a")
 
         let writer = try AVAssetWriter(outputURL: url, fileType: .m4a)
-        lock.withLock {
-            self.assetWriter = writer
-            self.recordingURL = url
+        lock.withLock { state in
+            state.assetWriter = writer
+            state.recordingURL = url
         }
         logger.info("Recording started → \(url.lastPathComponent)")
         return url
@@ -52,31 +73,38 @@ final class AudioRecordingService: @unchecked Sendable {
     ///
     /// On the first call, lazily creates the `AVAssetWriterInput` using the
     /// buffer's `formatDescription` as `sourceFormatHint` and starts writing.
+    ///
+    /// The lock is released before calling `AVAssetWriterInput.append(_:)` to
+    /// avoid blocking the capture queue on a potentially slow I/O operation.
+    ///
     /// Must be called from a serial queue (the capture queue).
     func appendSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        lock.lock()
-        guard let writer = assetWriter else { lock.unlock(); return }
+        let (input, isNew): (AVAssetWriterInput?, Bool) = lock.withLock { state in
+            guard let writer = state.assetWriter else { return (nil, false) }
 
-        if writerInput == nil {
-            let input = AVAssetWriterInput(
-                mediaType: .audio,
-                outputSettings: Self.outputSettings,
-                sourceFormatHint: sampleBuffer.formatDescription
-            )
-            input.expectsMediaDataInRealTime = true
-            writer.add(input)
-            guard writer.startWriting() else {
-                lock.unlock()
-                logger.error("AVAssetWriter failed to start: \(writer.error?.localizedDescription ?? "unknown")")
-                return
+            if state.writerInput == nil {
+                let input = AVAssetWriterInput(
+                    mediaType: .audio,
+                    outputSettings: Self.outputSettings,
+                    sourceFormatHint: sampleBuffer.formatDescription
+                )
+                input.expectsMediaDataInRealTime = true
+                writer.add(input)
+                guard writer.startWriting() else {
+                    logger.error("AVAssetWriter failed to start: \(writer.error?.localizedDescription ?? "unknown")")
+                    return (nil, false)
+                }
+                writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
+                state.writerInput = input
+                return (input, true)
             }
-            writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
-            writerInput = input
-            logger.info("Created recording writer input with source format: \(String(describing: sampleBuffer.formatDescription))")
+
+            return (state.writerInput, false)
         }
 
-        let input = writerInput
-        lock.unlock()
+        if isNew {
+            logger.info("Created recording writer input with source format: \(String(describing: sampleBuffer.formatDescription))")
+        }
 
         if let input, input.isReadyForMoreMediaData {
             input.append(sampleBuffer)
@@ -86,19 +114,20 @@ final class AudioRecordingService: @unchecked Sendable {
     /// Marks the writer input as finished so the asset writer can finalize.
     /// Must be called from the capture queue before `stopRecording()`.
     func finishWriterInput() {
-        lock.withLock {
-            writerInput?.markAsFinished()
-            writerInput = nil
+        lock.withLock { state in
+            state.writerInput?.markAsFinished()
+            state.writerInput = nil
         }
     }
 
     /// Finalizes the recording and returns the file URL on success, or nil on failure.
+    @discardableResult
     func stopRecording() async -> URL? {
-        let (writer, url) = lock.withLock { () -> (AVAssetWriter?, URL?) in
-            let w = assetWriter
-            let u = recordingURL
-            assetWriter = nil
-            writerInput = nil
+        let (writer, url) = lock.withLock { state -> (AVAssetWriter?, URL?) in
+            let w = state.assetWriter
+            let u = state.recordingURL
+            state.assetWriter = nil
+            state.writerInput = nil
             return (w, u)
         }
         guard let writer else { return nil }
@@ -114,11 +143,11 @@ final class AudioRecordingService: @unchecked Sendable {
 
     /// Removes the temporary recording file from disk.
     func cleanup() {
-        let url = lock.withLock { () -> URL? in
-            let u = recordingURL
-            recordingURL = nil
-            assetWriter = nil
-            writerInput = nil
+        let url = lock.withLock { state -> URL? in
+            let u = state.recordingURL
+            state.recordingURL = nil
+            state.assetWriter = nil
+            state.writerInput = nil
             return u
         }
         if let url {

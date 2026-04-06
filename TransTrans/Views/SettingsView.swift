@@ -96,6 +96,10 @@ private struct VocabularyTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            Text("These words are provided as hints to the speech recognition engine and may not always be prioritized.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
             Label(localeDisplayName, systemImage: "globe")
                 .font(.subheadline.bold())
 

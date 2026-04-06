@@ -1,5 +1,24 @@
 import SwiftUI
 
+/// Container view that bridges `SessionViewModel` into `SubtitleOverlayView`.
+///
+/// Uses `TimelineView` to periodically refresh `now` so expired subtitles are removed,
+/// while SwiftUI's `@Observable` tracking automatically re-renders when ViewModel
+/// data (entries, fontSize) changes — no manual `withObservationTracking` needed.
+struct SubtitleContainerView: View {
+    var viewModel: SessionViewModel
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            SubtitleOverlayView(
+                lines: viewModel.translationLines(forSlot: 0),
+                fontSize: viewModel.fontSize,
+                now: context.date
+            )
+        }
+    }
+}
+
 /// A subtitle-style overlay that displays recent translation lines at the bottom of the screen.
 /// Designed to look like movie subtitles: text centered on a semi-transparent background.
 struct SubtitleOverlayView: View {

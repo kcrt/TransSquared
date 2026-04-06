@@ -16,14 +16,14 @@ extension ContentView {
             Button {
                 viewModel.showAudioPopover.toggle()
             } label: {
-                AudioWaveformView(levels: viewModel.audioLevels, isActive: viewModel.isSessionActive)
+                AudioWaveformView(levels: viewModel.audioLevelMonitor.levels, isActive: viewModel.isSessionActive)
                     .frame(width: 60, height: 20)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .popover(isPresented: Bindable(viewModel).showAudioPopover) {
                 AudioLevelPopoverView(
-                    audioLevels: viewModel.audioLevels,
+                    audioLevels: viewModel.audioLevelMonitor.levels,
                     isActive: viewModel.isSessionActive,
                     silenceThreshold: SessionViewModel.silenceThreshold,
                     inputDeviceName: (viewModel.selectedMicrophone ?? AVCaptureDevice.default(for: .audio))?.localizedName,
@@ -121,23 +121,7 @@ extension ContentView {
         // Group 4: Language controls — source
         ToolbarItemGroup {
             Menu {
-                ForEach(viewModel.supportedSourceLocales, id: \.identifier) { locale in
-                    Button {
-                        logger.info("Source language selected: '\(locale.identifier)' (was '\(viewModel.sourceLocaleIdentifier)')")
-                        viewModel.sourceLocaleIdentifier = locale.identifier
-                        viewModel.downloadSpeechAssetsIfNeeded(for: locale)
-                        Task {
-                            await viewModel.updateTargetLanguages()
-                        }
-                    } label: {
-                        CheckmarkLabel(
-                            title: locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier,
-                            isSelected: viewModel.sourceLocaleIdentifier == locale.identifier,
-                            isDownloaded: viewModel.installedSourceLocaleIdentifiers.contains(locale.identifier),
-                            isDownloading: viewModel.downloadingSourceLocaleIdentifiers.contains(locale.identifier)
-                        )
-                    }
-                }
+                SourceLanguageMenuContent(viewModel: viewModel)
             } label: {
                 HStack(spacing: 4) {
                     Text(sourceLanguageLabel)
@@ -230,19 +214,7 @@ extension ContentView {
     func targetLanguageMenu(slot: Int) -> some View {
         let langId = viewModel.targetLanguageIdentifiers[slot]
         Menu {
-            ForEach(viewModel.supportedTargetLanguages, id: \.minimalIdentifier) { language in
-                Button {
-                    logger.info("Target \(slot) selected: '\(language.minimalIdentifier)' (was '\(viewModel.targetLanguageIdentifiers[slot])')")
-                    viewModel.targetLanguageIdentifiers[slot] = language.minimalIdentifier
-                    viewModel.prepareTranslationModelIfNeeded(for: language.minimalIdentifier)
-                } label: {
-                    CheckmarkLabel(
-                        title: displayName(for: language),
-                        isSelected: viewModel.targetLanguageIdentifiers[slot] == language.minimalIdentifier,
-                        isDownloaded: viewModel.targetLanguageDownloadStatus[language.minimalIdentifier] == true
-                    )
-                }
-            }
+            TargetLanguageMenuContent(viewModel: viewModel, slot: slot)
         } label: {
             Text(langId.uppercased())
                 .fontWeight(.medium)

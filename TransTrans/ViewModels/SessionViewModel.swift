@@ -140,32 +140,8 @@ final class SessionViewModel {
         return result
     }
 
-    /// Number of audio level samples kept for waveform visualization.
-    static let audioLevelSampleCount = 20
-    /// Ordered audio level samples for waveform visualization (oldest → newest, 0.0–1.0).
-    /// Cached to avoid allocating two new arrays on every SwiftUI redraw.
-    private(set) var audioLevels = Array(repeating: Float(0), count: audioLevelSampleCount)
-    private var audioLevelRingBuffer = Array(repeating: Float(0), count: audioLevelSampleCount)
-    private var audioLevelWriteIndex = 0
-
-    /// Writes a new level into the ring buffer and rebuilds the cached ordered array.
-    func appendAudioLevel(_ level: Float) {
-        audioLevelRingBuffer[audioLevelWriteIndex % Self.audioLevelSampleCount] = level
-        audioLevelWriteIndex += 1
-        let n = Self.audioLevelSampleCount
-        let start = audioLevelWriteIndex % n
-        if start == 0 {
-            audioLevels = audioLevelRingBuffer
-        } else {
-            // Single allocation instead of two slices + concatenation.
-            audioLevels = Array(unsafeUninitializedCapacity: n) { buffer, count in
-                let tail = n - start
-                for i in 0..<tail { buffer[i] = audioLevelRingBuffer[start + i] }
-                for i in 0..<start { buffer[tail + i] = audioLevelRingBuffer[i] }
-                count = n
-            }
-        }
-    }
+    /// Audio level monitor — separated to reduce observation churn from high-frequency updates.
+    let audioLevelMonitor = AudioLevelMonitor()
 
     // Language selection stored as String identifiers for reliable Picker binding.
     // Persisted via UserDefaults so the last-used languages are restored on relaunch.
@@ -242,6 +218,11 @@ final class SessionViewModel {
     }
 
     // MARK: - Internal State (accessed by extensions)
+    //
+    // These properties are `var` (internal setter) because they are mutated by
+    // ViewModel extensions in separate files. Swift's access control does not
+    // allow restricting setter access to "same class and its extensions across
+    // files" without making them fully internal.
 
     let transcriptionManager = TranscriptionManager()
     var transcriptionTask: Task<Void, Never>?
@@ -253,6 +234,20 @@ final class SessionViewModel {
     /// Total elapsed time accumulated from previous start/stop cycles.
     var accumulatedElapsedTime: TimeInterval = 0
     var segmentIndex = 0
+
+    // MARK: - Entry Index Map (O(1) lookup by UUID)
+
+    /// Maps entry UUIDs to their index in the `entries` array for O(1) lookup.
+    var entryIndexMap: [UUID: Int] = [:]
+
+    /// Rebuilds the entry index map from the current entries array.
+    /// Call after bulk mutations (remove, removeAll, etc.) that shift indices.
+    func rebuildEntryIndexMap() {
+        entryIndexMap.removeAll(keepingCapacity: true)
+        for (index, entry) in entries.enumerated() {
+            entryIndexMap[entry.id] = index
+        }
+    }
 
     /// Converts a raw audio offset to a cumulative elapsed time.
     /// For file transcription the offset is used directly; for live transcription
@@ -289,13 +284,16 @@ final class SessionViewModel {
         // Leave elapsedTime nil so it gets set from the audio offset of the
         // first transcription event for this entry. This ensures accurate
         // alignment with the recorded audio file for playback.
-        entries.append(TranscriptEntry(elapsedTime: nil))
-        return entries.count - 1
+        let entry = TranscriptEntry(elapsedTime: nil)
+        let idx = entries.count
+        entries.append(entry)
+        entryIndexMap[entry.id] = idx
+        return idx
     }
 
-    /// Finds the entry index for a given entry ID.
+    /// Finds the entry index for a given entry ID (O(1) via index map).
     func entryIndex(for entryID: UUID) -> Int? {
-        entries.firstIndex(where: { $0.id == entryID })
+        entryIndexMap[entryID]
     }
 
     /// Creates fresh translation slots for the current target language configuration.
@@ -479,20 +477,19 @@ final class SessionViewModel {
         // Remove any leftover partial state from the previous session
         if let idx = currentEntryIndex {
             entries[idx].pendingPartial = nil
-            for slot in 0..<entries[idx].translations.count {
-                if entries[idx].translations[slot]?.isPartial == true {
-                    entries[idx].translations[slot] = nil
-                }
-            }
+            entries[idx].translations = entries[idx].translations.filter { !$0.value.isPartial }
             // Remove the entry entirely if it has no content
-            if entries[idx].source.text.isEmpty && entries[idx].translations.allSatisfy({ $0 == nil }) {
+            if entries[idx].source.text.isEmpty && entries[idx].translations.isEmpty {
                 entries.remove(at: idx)
+                rebuildEntryIndexMap()
             }
         }
 
         // Insert a separator if there is previous history
         if !entries.isEmpty {
-            entries.append(TranscriptEntry(isSeparator: true))
+            let separator = TranscriptEntry(isSeparator: true)
+            entries.append(separator)
+            entryIndexMap[separator.id] = entries.count - 1
         }
 
         pendingSentenceBuffer = ""
@@ -523,7 +520,7 @@ final class SessionViewModel {
                     audioLevelTask = Task {
                         var silenceStart: ContinuousClock.Instant?
                         for await level in levelStream {
-                            appendAudioLevel(level)
+                            audioLevelMonitor.append(level)
 
                             // Silence-based sentence boundary detection:
                             // When actual audio silence persists for sentenceBoundarySeconds,
@@ -576,6 +573,10 @@ final class SessionViewModel {
         sentenceBoundaryTimer?.cancel()
         sentenceBoundaryTimer = nil
 
+        // Capture elapsed time before async cleanup so it reflects the
+        // wall-clock duration of actual transcription, not the teardown wait.
+        let stopDate = Date()
+
         // Stop transcription gracefully — this lets the analyzer finalize
         // its current hypothesis and produce a final result before closing.
         // While awaiting, transcriptionTask continues processing events on
@@ -586,10 +587,10 @@ final class SessionViewModel {
         transcriptionTask?.cancel()
         transcriptionTask = nil
 
-        // Accumulate elapsed time from this session segment (after final
-        // events are processed so adjustedElapsedTime is correct).
+        // Accumulate elapsed time from this session segment, using the
+        // timestamp captured before the async stop to avoid inflating it.
         if let start = sessionStartDate {
-            accumulatedElapsedTime += Date().timeIntervalSince(start)
+            accumulatedElapsedTime += stopDate.timeIntervalSince(start)
         }
         sessionStartDate = nil
 
@@ -612,7 +613,7 @@ final class SessionViewModel {
 
         // Finalize recording (keep URL for playback)
         if let recorder = recordingService {
-            _ = await recorder.stopRecording()
+            await recorder.stopRecording()
             recordingService = nil
             logger.info("Audio recording finalized")
         }
@@ -622,9 +623,7 @@ final class SessionViewModel {
         // so that pending/in-flight translations can still complete.
         // startSession() replaces translationSlots entirely, so no stale state leaks.
         cleanupTranslationSlotState()
-        audioLevels = Array(repeating: 0, count: Self.audioLevelSampleCount)
-        audioLevelRingBuffer = Array(repeating: 0, count: Self.audioLevelSampleCount)
-        audioLevelWriteIndex = 0
+        audioLevelMonitor.reset()
         logger.info("Session stopped (entries: \(self.entries.count))")
 
         // Refresh download status — models may have been downloaded during the session
@@ -669,7 +668,7 @@ final class SessionViewModel {
         guard audioTime >= 0 else { return }
 
         // Look up the entry's duration for auto-stop
-        let duration = entries.first(where: { $0.id == entryID })?.duration
+        let duration = entryIndex(for: entryID).flatMap { entries[$0].duration }
 
         // Toggle: stop if already playing this entry, otherwise play
         if playbackService?.playingEntryID == entryID && playbackService?.isPlaying == true {
@@ -691,9 +690,8 @@ final class SessionViewModel {
         }
 
         // Look up the translation text for this entry and slot
-        guard let entry = entries.first(where: { $0.id == entryID }),
-              slot < entry.translations.count,
-              let translation = entry.translations[slot],
+        guard let idx = entryIndex(for: entryID),
+              let translation = entries[idx].translations[slot],
               !translation.text.isEmpty else { return }
 
         let language = targetLanguageIdentifiers[slot]
@@ -737,15 +735,19 @@ final class SessionViewModel {
 
     // MARK: - Font Size
 
+    static let minFontSize: CGFloat = 12
+    static let maxFontSize: CGFloat = 32
+    static let fontSizeStep: CGFloat = 2
+
     func increaseFontSize() {
-        if fontSize < 32 {
-            fontSize += 2
+        if fontSize < Self.maxFontSize {
+            fontSize += Self.fontSizeStep
         }
     }
 
     func decreaseFontSize() {
-        if fontSize > 12 {
-            fontSize -= 2
+        if fontSize > Self.minFontSize {
+            fontSize -= Self.fontSizeStep
         }
     }
 
@@ -757,8 +759,11 @@ final class SessionViewModel {
     }
 
     private func persistToUserDefaults<T: Codable>(_ value: T, forKey key: String) {
-        if let data = try? JSONEncoder().encode(value) {
+        do {
+            let data = try JSONEncoder().encode(value)
             defaults.set(data, forKey: key)
+        } catch {
+            logger.error("Failed to encode '\(key)' for UserDefaults: \(error.localizedDescription)")
         }
     }
 

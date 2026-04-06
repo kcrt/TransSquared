@@ -191,8 +191,7 @@ extension SessionViewModel {
 
             // Re-validate after await: the entries array may have changed during the async gap.
             guard slot < translationSlots.count,
-                  let entryIdx = entryIndex(for: entryID),
-                  slot < entries[entryIdx].translations.count else {
+                  let entryIdx = entryIndex(for: entryID) else {
                 logger.debug("Slot \(slot) entry \(entryID) no longer valid after translation, discarding result")
                 return
             }
@@ -224,7 +223,7 @@ extension SessionViewModel {
         } catch {
             logger.error("Slot \(slot) translation failed: \(error.localizedDescription)")
             if !isPartial {
-                if let entryIdx = entryIndex(for: entryID), slot < entries[entryIdx].translations.count {
+                if let entryIdx = entryIndex(for: entryID) {
                     let existing = entries[entryIdx].translations[slot]
                     entries[entryIdx].translations[slot] = TransString(
                         id: existing?.id ?? UUID(), text: "[Translation failed]", isPartial: false, finalizedAt: Date()

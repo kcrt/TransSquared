@@ -59,8 +59,8 @@ struct TranscriptEntry: Identifiable, Sendable {
     var source: TransString
     /// Current partial recognition text (in-progress, not yet finalized). Displayed but temporary.
     var pendingPartial: String?
-    /// Translations indexed by slot (0..<maxTargetCount). `nil` means not yet translated.
-    var translations: [TransString?]
+    /// Translations keyed by slot index (0..<maxTargetCount). Missing keys mean not yet translated.
+    var translations: [Int: TransString]
     /// Cumulative elapsed time (in seconds) from the first session start when this entry was created.
     var elapsedTime: TimeInterval?
     /// The duration of spoken audio for this entry, in seconds.
@@ -77,7 +77,7 @@ struct TranscriptEntry: Identifiable, Sendable {
         id: UUID = UUID(),
         source: TransString = TransString(text: "", isPartial: false),
         pendingPartial: String? = nil,
-        translations: [TransString?]? = nil,
+        translations: [Int: TransString]? = nil,
         elapsedTime: TimeInterval? = nil,
         duration: TimeInterval? = nil,
         isSeparator: Bool = false,
@@ -86,7 +86,7 @@ struct TranscriptEntry: Identifiable, Sendable {
         self.id = id
         self.source = source
         self.pendingPartial = pendingPartial
-        self.translations = translations ?? Array(repeating: nil, count: Self.maxTranslationSlots)
+        self.translations = translations ?? [:]
         self.elapsedTime = elapsedTime
         self.duration = duration
         self.isSeparator = isSeparator
@@ -124,7 +124,7 @@ struct TranscriptEntry: Identifiable, Sendable {
 
     /// Derives a `TranscriptLine` for the translation pane of the given slot, or `nil` if no translation exists.
     func translationTranscriptLine(forSlot slot: Int) -> TranscriptLine? {
-        guard slot < translations.count, let trans = translations[slot] else { return nil }
+        guard let trans = translations[slot] else { return nil }
         return TranscriptLine(
             id: trans.id,
             text: trans.text,

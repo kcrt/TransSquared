@@ -50,6 +50,52 @@ struct SaveTranscriptMenuItems: View {
     }
 }
 
+// MARK: - Shared Language Menu Content
+
+/// Shared source language menu items used by both the toolbar and menu bar.
+struct SourceLanguageMenuContent: View {
+    var viewModel: SessionViewModel
+
+    var body: some View {
+        ForEach(viewModel.supportedSourceLocales, id: \.identifier) { locale in
+            Button {
+                viewModel.sourceLocaleIdentifier = locale.identifier
+                viewModel.downloadSpeechAssetsIfNeeded(for: locale)
+                Task { await viewModel.updateTargetLanguages() }
+            } label: {
+                CheckmarkLabel(
+                    title: locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier,
+                    isSelected: viewModel.sourceLocaleIdentifier == locale.identifier,
+                    isDownloaded: viewModel.installedSourceLocaleIdentifiers.contains(locale.identifier),
+                    isDownloading: viewModel.downloadingSourceLocaleIdentifiers.contains(locale.identifier)
+                )
+            }
+        }
+    }
+}
+
+/// Shared target language menu items for a single slot.
+struct TargetLanguageMenuContent: View {
+    var viewModel: SessionViewModel
+    var slot: Int
+
+    var body: some View {
+        ForEach(viewModel.supportedTargetLanguages, id: \.minimalIdentifier) { language in
+            Button {
+                viewModel.targetLanguageIdentifiers[slot] = language.minimalIdentifier
+                viewModel.prepareTranslationModelIfNeeded(for: language.minimalIdentifier)
+            } label: {
+                CheckmarkLabel(
+                    title: Locale.current.localizedString(forIdentifier: language.minimalIdentifier)
+                        ?? language.minimalIdentifier,
+                    isSelected: viewModel.targetLanguageIdentifiers[slot] == language.minimalIdentifier,
+                    isDownloaded: viewModel.targetLanguageDownloadStatus[language.minimalIdentifier] == true
+                )
+            }
+        }
+    }
+}
+
 // MARK: - Checkmark Menu Item Label
 
 /// A menu button label that shows a checkmark when selected, a cloud icon when not downloaded,

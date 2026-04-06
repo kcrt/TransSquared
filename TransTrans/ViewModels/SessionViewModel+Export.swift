@@ -49,6 +49,7 @@ extension SessionViewModel {
 
     func clearHistory() {
         entries = []
+        rebuildEntryIndexMap()
         cleanupTranslationSlotState()
         for slot in 0..<translationSlots.count {
             translationSlots[slot].queue = []

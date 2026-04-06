@@ -54,8 +54,7 @@ struct TranscriptEntryTests {
         let entry = TranscriptEntry()
         #expect(entry.source.text.isEmpty)
         #expect(entry.pendingPartial == nil)
-        #expect(entry.translations.count == TranscriptEntry.maxTranslationSlots)
-        #expect(entry.translations.allSatisfy { $0 == nil })
+        #expect(entry.translations.isEmpty)
         #expect(entry.elapsedTime == nil)
         #expect(entry.duration == nil)
         #expect(entry.isSeparator == false)
@@ -617,6 +616,18 @@ struct EntryHelperTests {
         let idx2 = vm.ensureCurrentEntry()
         #expect(idx1 == idx2)
         #expect(vm.entries.count == 1)
+    }
+
+    @Test func entryIndexMapIsBuiltByEnsureCurrentEntry() {
+        let vm = makeTestViewModel()
+        let idx = vm.ensureCurrentEntry()
+        let entryID = vm.entries[idx].id
+        #expect(vm.entryIndex(for: entryID) == idx)
+    }
+
+    @Test func entryIndexMapReturnsNilForUnknownID() {
+        let vm = makeTestViewModel()
+        #expect(vm.entryIndex(for: UUID()) == nil)
     }
 }
 
