@@ -1,0 +1,126 @@
+name: Build, Notarize & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+
+      - name: Import signing certificate
+        env:
+          DEVELOPER_ID_CERT_BASE64: ${{ secrets.DEVELOPER_ID_CERT_BASE64 }}
+          DEVELOPER_ID_CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
+          KEYCHAIN_PASSWORD=$(uuidgen)
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          echo "$DEVELOPER_ID_CERT_BASE64" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 \
+            -P "$DEVELOPER_ID_CERT_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          # Allow codesign to access keychain
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
+      - name: Build archive
+        run: |
+          xcodebuild archive \
+            -project TransSquared.xcodeproj \
+            -scheme TransSquared \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/TransSquared.xcarchive \
+            DEVELOPMENT_TEAM=${{ secrets.DEVELOPMENT_TEAM }} \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            CODE_SIGN_STYLE=Manual
+
+      - name: Export app
+        run: |
+          cat > $RUNNER_TEMP/ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>developer-id</string>
+            <key>teamID</key>
+            <string>${{ secrets.DEVELOPMENT_TEAM }}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Developer ID Application</string>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/TransSquared.xcarchive \
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/export
+
+      - name: Create DMG
+        run: |
+          APP_PATH="$RUNNER_TEMP/export/TransSquared.app"
+          DMG_PATH="$RUNNER_TEMP/TransSquared.dmg"
+
+          hdiutil create -volname "TransSquared" \
+            -srcfolder "$APP_PATH" \
+            -ov -format UDZO \
+            "$DMG_PATH"
+
+          # Sign the DMG
+          codesign --force --sign "Developer ID Application" "$DMG_PATH"
+
+      - name: Notarize DMG
+        env:
+          NOTARIZE_APPLE_ID: ${{ secrets.NOTARIZE_APPLE_ID }}
+          NOTARIZE_PASSWORD: ${{ secrets.NOTARIZE_PASSWORD }}
+          NOTARIZE_TEAM_ID: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          xcrun notarytool submit "$RUNNER_TEMP/TransSquared.dmg" \
+            --apple-id "$NOTARIZE_APPLE_ID" \
+            --password "$NOTARIZE_PASSWORD" \
+            --team-id "$NOTARIZE_TEAM_ID" \
+            --wait
+
+          # Staple the notarization ticket
+          xcrun stapler staple "$RUNNER_TEMP/TransSquared.dmg"
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: TransSquared v${{ steps.version.outputs.VERSION }}
+          generate_release_notes: true
+          draft: true
+          files: ${{ runner.temp }}/TransSquared.dmg
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain $RUNNER_TEMP/build.keychain-db 2>/dev/null || true
