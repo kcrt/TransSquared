@@ -42,7 +42,7 @@ extension SessionViewModel {
         case .translation: suffix = "translation"
         case .both: suffix = "interleaved"
         }
-        return "TransTrans_\(Self.fileTimestamp())_\(suffix).txt"
+        return "TransSquared_\(Self.fileTimestamp())_\(suffix).txt"
     }
 
     // MARK: - Copy / Export Helpers
@@ -84,7 +84,7 @@ extension SessionViewModel {
     }
 
     private func defaultAudioFileName() -> String {
-        "TransTrans_\(Self.fileTimestamp())_recording.m4a"
+        "TransSquared_\(Self.fileTimestamp())_recording.m4a"
     }
 
     func copyAllOriginal() -> String {
@@ -174,7 +174,7 @@ extension SessionViewModel {
         case .translation: suffix = "translation"
         case .both: suffix = "bilingual"
         }
-        return "TransTrans_\(Self.fileTimestamp())_\(suffix).\(format.fileExtension)"
+        return "TransSquared_\(Self.fileTimestamp())_\(suffix).\(format.fileExtension)"
     }
 
     // MARK: - Subtitle Generation

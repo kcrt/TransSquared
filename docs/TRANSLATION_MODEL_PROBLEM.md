@@ -199,7 +199,7 @@ If `prepareTranslation()` fails to show the download dialog:
 
 1. Open **System Settings** > **General** > **Language & Region** > **Translation Languages**
 2. Download the source language model (e.g., "Korean") manually
-3. Return to TransTrans and retry
+3. Return to Trans² and retry
 
 This bypasses `prepareTranslation()` entirely by installing the model at the OS level.
 
@@ -242,7 +242,7 @@ appears briefly and is immediately dismissed on the first call to `prepareTransl
 is being presented cause the sheet to auto-dismiss. The `.translationTask()` modifier
 re-evaluates when observed state changes, which can tear down the sheet.
 
-In TransTrans, potential triggers include:
+In Trans², potential triggers include:
 - `targetLanguageIdentifiers[slot] = ...` immediately before `prepareTranslationModelIfNeeded()`
   in toolbar/menu button handlers
 - `errorMessage = "..."` immediately before `prepareTranslationModelIfNeeded()` in `startSession()`

@@ -1,13 +1,13 @@
 //
-//  TransTransUITestsLaunchTests.swift
-//  TransTransUITests
+//  TransSquaredUITestsLaunchTests.swift
+//  TransSquaredUITests
 //
 //  Created by 高橋亨平 on 2026-03-24.
 //
 
 import XCTest
 
-final class TransTransUITestsLaunchTests: XCTestCase {
+final class TransSquaredUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

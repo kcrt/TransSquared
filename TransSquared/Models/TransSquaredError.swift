@@ -1,7 +1,7 @@
 import Foundation
 
-/// Consolidated error type for TransTrans.
-enum TransTransError: Error, LocalizedError {
+/// Consolidated error type for Trans².
+enum TransSquaredError: Error, LocalizedError {
     // Audio capture errors
     case alreadyCapturing
     case microphoneUnavailable

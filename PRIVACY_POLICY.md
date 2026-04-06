@@ -4,11 +4,11 @@
 
 ## Overview
 
-TransTrans ("the App") is a real-time speech transcription and translation app for macOS, developed by Kyohei Takahashi. Your privacy is important to us. This policy explains how the App handles your data.
+Trans² ("the App") is a real-time speech transcription and translation app for macOS, developed by Kyohei Takahashi. Your privacy is important to us. This policy explains how the App handles your data.
 
 ## Data Collection
 
-**TransTrans does not collect, store, or transmit any personal data to external servers.**
+**Trans² does not collect, store, or transmit any personal data to external servers.**
 
 All processing occurs entirely on your device using Apple's built-in frameworks.
 
@@ -38,15 +38,15 @@ These preferences never leave your device.
 
 ## Third-Party Services
 
-TransTrans does not integrate any third-party analytics, advertising, tracking, or crash-reporting services.
+Trans² does not integrate any third-party analytics, advertising, tracking, or crash-reporting services.
 
 ## Data Sharing
 
-TransTrans does not share any data with third parties.
+Trans² does not share any data with third parties.
 
 ## Children's Privacy
 
-TransTrans does not knowingly collect any information from children.
+Trans² does not knowingly collect any information from children.
 
 ## Changes to This Policy
 
@@ -56,4 +56,4 @@ If this policy is updated, the revised version will be posted here with an updat
 
 If you have questions about this privacy policy, please contact:
 
-- GitHub: [https://github.com/kcrt/TransTrans](https://github.com/kcrt/TransTrans)
+- GitHub: [https://github.com/kcrt/TransSquared](https://github.com/kcrt/TransSquared)

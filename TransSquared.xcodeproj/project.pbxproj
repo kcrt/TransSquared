@@ -29,25 +29,25 @@
 
 /* Begin PBXFileReference section */
 		8700A7DC2F7BFB8900D466E6 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		877C4FFB2F7242D300C85C5C /* TransTrans.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TransTrans.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		877C500A2F7242D400C85C5C /* TransTransTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TransTransTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		877C50142F7242D400C85C5C /* TransTransUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TransTransUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		877C4FFB2F7242D300C85C5C /* TransSquared.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TransSquared.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		877C500A2F7242D400C85C5C /* TransSquaredTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TransSquaredTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		877C50142F7242D400C85C5C /* TransSquaredUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TransSquaredUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		877C4FFD2F7242D300C85C5C /* TransTrans */ = {
+		877C4FFD2F7242D300C85C5C /* TransSquared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = TransTrans;
+			path = TransSquared;
 			sourceTree = "<group>";
 		};
-		877C500D2F7242D400C85C5C /* TransTransTests */ = {
+		877C500D2F7242D400C85C5C /* TransSquaredTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = TransTransTests;
+			path = TransSquaredTests;
 			sourceTree = "<group>";
 		};
-		877C50172F7242D400C85C5C /* TransTransUITests */ = {
+		877C50172F7242D400C85C5C /* TransSquaredUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = TransTransUITests;
+			path = TransSquaredUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -81,9 +81,9 @@
 			isa = PBXGroup;
 			children = (
 				8700A7DC2F7BFB8900D466E6 /* PrivacyInfo.xcprivacy */,
-				877C4FFD2F7242D300C85C5C /* TransTrans */,
-				877C500D2F7242D400C85C5C /* TransTransTests */,
-				877C50172F7242D400C85C5C /* TransTransUITests */,
+				877C4FFD2F7242D300C85C5C /* TransSquared */,
+				877C500D2F7242D400C85C5C /* TransSquaredTests */,
+				877C50172F7242D400C85C5C /* TransSquaredUITests */,
 				877C4FFC2F7242D300C85C5C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -91,9 +91,9 @@
 		877C4FFC2F7242D300C85C5C /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				877C4FFB2F7242D300C85C5C /* TransTrans.app */,
-				877C500A2F7242D400C85C5C /* TransTransTests.xctest */,
-				877C50142F7242D400C85C5C /* TransTransUITests.xctest */,
+				877C4FFB2F7242D300C85C5C /* TransSquared.app */,
+				877C500A2F7242D400C85C5C /* TransSquaredTests.xctest */,
+				877C50142F7242D400C85C5C /* TransSquaredUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -101,9 +101,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		877C4FFA2F7242D300C85C5C /* TransTrans */ = {
+		877C4FFA2F7242D300C85C5C /* TransSquared */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 877C501E2F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransTrans" */;
+			buildConfigurationList = 877C501E2F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransSquared" */;
 			buildPhases = (
 				877C4FF72F7242D300C85C5C /* Sources */,
 				877C4FF82F7242D300C85C5C /* Frameworks */,
@@ -114,18 +114,18 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				877C4FFD2F7242D300C85C5C /* TransTrans */,
+				877C4FFD2F7242D300C85C5C /* TransSquared */,
 			);
-			name = TransTrans;
+			name = TransSquared;
 			packageProductDependencies = (
 			);
 			productName = TransTrans;
-			productReference = 877C4FFB2F7242D300C85C5C /* TransTrans.app */;
+			productReference = 877C4FFB2F7242D300C85C5C /* TransSquared.app */;
 			productType = "com.apple.product-type.application";
 		};
-		877C50092F7242D400C85C5C /* TransTransTests */ = {
+		877C50092F7242D400C85C5C /* TransSquaredTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 877C50212F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransTransTests" */;
+			buildConfigurationList = 877C50212F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransSquaredTests" */;
 			buildPhases = (
 				877C50062F7242D400C85C5C /* Sources */,
 				877C50072F7242D400C85C5C /* Frameworks */,
@@ -137,18 +137,18 @@
 				877C500C2F7242D400C85C5C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				877C500D2F7242D400C85C5C /* TransTransTests */,
+				877C500D2F7242D400C85C5C /* TransSquaredTests */,
 			);
-			name = TransTransTests;
+			name = TransSquaredTests;
 			packageProductDependencies = (
 			);
 			productName = TransTransTests;
-			productReference = 877C500A2F7242D400C85C5C /* TransTransTests.xctest */;
+			productReference = 877C500A2F7242D400C85C5C /* TransSquaredTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		877C50132F7242D400C85C5C /* TransTransUITests */ = {
+		877C50132F7242D400C85C5C /* TransSquaredUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 877C50242F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransTransUITests" */;
+			buildConfigurationList = 877C50242F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransSquaredUITests" */;
 			buildPhases = (
 				877C50102F7242D400C85C5C /* Sources */,
 				877C50112F7242D400C85C5C /* Frameworks */,
@@ -160,13 +160,13 @@
 				877C50162F7242D400C85C5C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				877C50172F7242D400C85C5C /* TransTransUITests */,
+				877C50172F7242D400C85C5C /* TransSquaredUITests */,
 			);
-			name = TransTransUITests;
+			name = TransSquaredUITests;
 			packageProductDependencies = (
 			);
 			productName = TransTransUITests;
-			productReference = 877C50142F7242D400C85C5C /* TransTransUITests.xctest */;
+			productReference = 877C50142F7242D400C85C5C /* TransSquaredUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -192,7 +192,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 877C4FF62F7242D300C85C5C /* Build configuration list for PBXProject "TransTrans" */;
+			buildConfigurationList = 877C4FF62F7242D300C85C5C /* Build configuration list for PBXProject "TransSquared" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -207,9 +207,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				877C4FFA2F7242D300C85C5C /* TransTrans */,
-				877C50092F7242D400C85C5C /* TransTransTests */,
-				877C50132F7242D400C85C5C /* TransTransUITests */,
+				877C4FFA2F7242D300C85C5C /* TransSquared */,
+				877C50092F7242D400C85C5C /* TransSquaredTests */,
+				877C50132F7242D400C85C5C /* TransSquaredUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -266,12 +266,12 @@
 /* Begin PBXTargetDependency section */
 		877C500C2F7242D400C85C5C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 877C4FFA2F7242D300C85C5C /* TransTrans */;
+			target = 877C4FFA2F7242D300C85C5C /* TransSquared */;
 			targetProxy = 877C500B2F7242D400C85C5C /* PBXContainerItemProxy */;
 		};
 		877C50162F7242D400C85C5C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 877C4FFA2F7242D300C85C5C /* TransTrans */;
+			target = 877C4FFA2F7242D300C85C5C /* TransSquared */;
 			targetProxy = 877C50152F7242D400C85C5C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -430,13 +430,14 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Trans²";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.transtrans;
+				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.transsquared;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -473,13 +474,14 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Trans²";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.transtrans;
+				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.transsquared;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -502,14 +504,14 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.TransTransTests;
+				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.TransSquaredTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TransTrans.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TransTrans";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TransSquared.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TransSquared";
 			};
 			name = Debug;
 		};
@@ -524,14 +526,14 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.TransTransTests;
+				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.TransSquaredTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TransTrans.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TransTrans";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TransSquared.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TransSquared";
 			};
 			name = Release;
 		};
@@ -544,14 +546,14 @@
 				DEVELOPMENT_TEAM = 8294NJBLVG;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.TransTransUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.TransSquaredUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = TransTrans;
+				TEST_TARGET_NAME = TransSquared;
 			};
 			name = Debug;
 		};
@@ -564,21 +566,21 @@
 				DEVELOPMENT_TEAM = 8294NJBLVG;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.TransTransUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = net.kcrt.app.TransSquaredUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = TransTrans;
+				TEST_TARGET_NAME = TransSquared;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		877C4FF62F7242D300C85C5C /* Build configuration list for PBXProject "TransTrans" */ = {
+		877C4FF62F7242D300C85C5C /* Build configuration list for PBXProject "TransSquared" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				877C501C2F7242D400C85C5C /* Debug */,
@@ -587,7 +589,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		877C501E2F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransTrans" */ = {
+		877C501E2F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransSquared" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				877C501F2F7242D400C85C5C /* Debug */,
@@ -596,7 +598,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		877C50212F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransTransTests" */ = {
+		877C50212F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransSquaredTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				877C50222F7242D400C85C5C /* Debug */,
@@ -605,7 +607,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		877C50242F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransTransUITests" */ = {
+		877C50242F7242D400C85C5C /* Build configuration list for PBXNativeTarget "TransSquaredUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				877C50252F7242D400C85C5C /* Debug */,

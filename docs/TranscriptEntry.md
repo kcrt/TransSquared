@@ -2,7 +2,7 @@
 
 ## Overview
 
-`TranscriptEntry` is the core data model of TransTrans.
+`TranscriptEntry` is the core data model of Trans².
 It groups source text, translations, and metadata for a single utterance (sentence).
 
 ```

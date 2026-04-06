@@ -14,7 +14,7 @@ final class AudioCaptureService {
     private var delegate: AudioCaptureDelegate?
     private var inputContinuation: AsyncStream<AnalyzerInput>.Continuation?
     private var isCapturing = false
-    private let captureQueue = DispatchQueue(label: "net.kcrt.app.transtrans.audiocapture", qos: .userInteractive)
+    private let captureQueue = DispatchQueue(label: "net.kcrt.app.transsquared.audiocapture", qos: .userInteractive)
 
     /// Publishes audio level samples (0.0–1.0) for waveform visualization.
     private var levelContinuation: AsyncStream<Float>.Continuation?
@@ -23,12 +23,12 @@ final class AudioCaptureService {
     func startCapture(audioFormat: AVAudioFormat, device: AVCaptureDevice? = nil, recordingService: AudioRecordingService? = nil) async throws -> AsyncStream<AnalyzerInput> {
         guard !isCapturing else {
             logger.error("startCapture called while already capturing")
-            throw TransTransError.alreadyCapturing
+            throw TransSquaredError.alreadyCapturing
         }
 
         guard let audioDevice = device ?? AVCaptureDevice.default(for: .audio) else {
             logger.error("No default audio device available for capture")
-            throw TransTransError.microphoneUnavailable
+            throw TransSquaredError.microphoneUnavailable
         }
         logger.info("Starting capture with device: \(audioDevice.localizedName)")
         logger.info("Target audio format: \(audioFormat.sampleRate) Hz, \(audioFormat.channelCount) ch, \(audioFormat.commonFormat.rawValue)")
@@ -40,7 +40,7 @@ final class AudioCaptureService {
         let audioInput = try AVCaptureDeviceInput(device: audioDevice)
         guard session.canAddInput(audioInput) else {
             logger.error("Cannot add audio input to capture session")
-            throw TransTransError.microphoneUnavailable
+            throw TransSquaredError.microphoneUnavailable
         }
         session.addInput(audioInput)
         logger.debug("Added audio input to session")
@@ -49,7 +49,7 @@ final class AudioCaptureService {
         let audioOutput = AVCaptureAudioDataOutput()
         guard session.canAddOutput(audioOutput) else {
             logger.error("Cannot add audio output to capture session")
-            throw TransTransError.microphoneUnavailable
+            throw TransSquaredError.microphoneUnavailable
         }
         session.addOutput(audioOutput)
 
@@ -109,7 +109,7 @@ final class AudioCaptureService {
                     continuation.resume()
                 } else {
                     logger.error("AVCaptureSession failed to start running")
-                    continuation.resume(throwing: TransTransError.microphoneUnavailable)
+                    continuation.resume(throwing: TransSquaredError.microphoneUnavailable)
                 }
             }
         }

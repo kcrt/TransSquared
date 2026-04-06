@@ -5,8 +5,8 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 ​Kyohei ​Takahashi</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>TransTrans uses the microphone for real-time speech transcription.</string>
+	<string>Trans² uses the microphone for real-time speech transcription.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>TransTrans uses speech recognition for real-time transcription.</string>
+	<string>Trans² uses speech recognition for real-time transcription.</string>
 </dict>
 </plist>

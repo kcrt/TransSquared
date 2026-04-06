@@ -2,7 +2,7 @@
 
 ## Overview
 
-TransTrans translates recognized speech into one or more target languages in real time.
+Trans² translates recognized speech into one or more target languages in real time.
 Each target language runs in its own **translation slot** — slots are independent and
 process translations concurrently. Within a single slot, translations are processed
 serially in FIFO order.

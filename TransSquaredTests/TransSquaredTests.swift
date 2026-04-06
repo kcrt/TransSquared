@@ -1,20 +1,20 @@
 //
-//  TransTransTests.swift
-//  TransTransTests
+//  TransSquaredTests.swift
+//  TransSquaredTests
 //
 //  Created by 高橋亨平 on 2026-03-24.
 //
 
 import Foundation
 import Testing
-@testable import TransTrans
+@testable import TransSquared
 
 // MARK: - Test Helpers
 
 /// Creates an ephemeral `UserDefaults` suite that won't pollute the app's real settings.
 @MainActor
 private func makeTestViewModel() -> SessionViewModel {
-    let suiteName = "com.transtrans.tests.\(UUID().uuidString)"
+    let suiteName = "com.transsquared.tests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!
     return SessionViewModel(defaults: defaults)
 }

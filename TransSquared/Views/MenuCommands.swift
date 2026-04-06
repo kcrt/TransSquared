@@ -180,10 +180,10 @@ struct AppMenuCommands: Commands {
 
         // Help menu
         CommandGroup(replacing: .help) {
-            Link("TransTrans Support",
-                 destination: URL(staticString: "https://github.com/kcrt/TransTrans"))
+            Link("Trans² Support",
+                 destination: URL(staticString: "https://github.com/kcrt/TransSquared"))
             Link("Report an Issue (GitHub)",
-                 destination: URL(staticString: "https://github.com/kcrt/TransTrans/issues"))
+                 destination: URL(staticString: "https://github.com/kcrt/TransSquared/issues"))
         }
 
         #if DEBUG

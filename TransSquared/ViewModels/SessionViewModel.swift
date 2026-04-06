@@ -7,7 +7,7 @@ import os
 
 private let logger = Logger.app("Session")
 
-/// Central view model that owns all application state for TransTrans.
+/// Central view model that owns all application state for Trans².
 ///
 /// Responsibilities are split across extensions by domain:
 /// - **Session lifecycle** — `startSession()` / `stopSession()` (this file)

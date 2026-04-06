@@ -58,7 +58,7 @@ actor TranscriptionManager {
     func start(locale: Locale, audioDevice: AVCaptureDevice? = nil, contextualStrings: [String] = [], recordingService: AudioRecordingService? = nil) async throws -> TranscriptionStreams {
         guard !isRunning else {
             logger.warning("start() called while already running")
-            throw TransTransError.alreadyRunning
+            throw TransSquaredError.alreadyRunning
         }
 
         logger.info("Starting transcription for locale: \(locale.identifier)")
@@ -88,7 +88,7 @@ actor TranscriptionManager {
             compatibleWith: [newTranscriber]
         ) else {
             logger.error("No compatible audio format found for transcriber")
-            throw TransTransError.audioFormatUnavailable
+            throw TransSquaredError.audioFormatUnavailable
         }
         logger.info("Selected audio format: \(audioFormat.sampleRate) Hz, \(audioFormat.channelCount) ch")
 

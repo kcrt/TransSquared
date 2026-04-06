@@ -3,7 +3,7 @@
 ## Project Structure
 
 ```
-TransTransApp
+TransSquaredApp
 └── ContentView
     ├── ContentView+Toolbar (native macOS toolbar: record, save, display, language, font)
     ├── MenuCommands (global menu bar commands & shortcuts)
@@ -30,7 +30,7 @@ SessionViewModel (@Observable)
 
 | Layer | Responsibility |
 |---|---|
-| **Models** | Transcript lines, translation slots (`TranslationSlot`), error types (`TransTransError`) |
+| **Models** | Transcript lines, translation slots (`TranslationSlot`), error types (`TransSquaredError`) |
 | **Services** | Audio capture (`AVCaptureSession`), speech recognition (`SpeechTranscriber`, `SpeechAnalyzer`), audio analysis (`AVAudioPCMBuffer+RMS`) |
 | **ViewModel** | State management, translation queue, sentence boundary detection, user preferences — split into focused extensions |
 | **Views** | SwiftUI declarative UI with native toolbar, menu commands, and keyboard shortcuts |
@@ -44,7 +44,7 @@ SessionViewModel (@Observable)
 
 ## Build
 
-Open `TransTrans.xcodeproj` in Xcode and build the project (⌘B).
+Open `TransSquared.xcodeproj` in Xcode and build the project (⌘B).
 
 ## Further Documentation
 

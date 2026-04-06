@@ -44,7 +44,7 @@ struct ContentView: View {
         .frame(minWidth: 320, minHeight: viewModel.targetCount > 1 ? 320 : 200)
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                Text("TransTrans")
+                Text("Trans²")
                     .font(.headline)
             }
             .sharedBackgroundVisibility(.hidden)

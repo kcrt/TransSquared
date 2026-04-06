@@ -1,13 +1,13 @@
 //
-//  TransTransUITests.swift
-//  TransTransUITests
+//  TransSquaredUITests.swift
+//  TransSquaredUITests
 //
 //  Created by 高橋亨平 on 2026-03-24.
 //
 
 import XCTest
 
-final class TransTransUITests: XCTestCase {
+final class TransSquaredUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

@@ -1,6 +1,18 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "CFBundleDisplayName" : {
+      "comment" : "Bundle display name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Trans²"
+          }
+        }
+      }
+    },
     "CFBundleName" : {
       "comment" : "Bundle name",
       "extractionState" : "extracted_with_value",
@@ -8,13 +20,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "TransTrans"
+            "value" : "TransSquared"
           }
         },
         "ja" : {
           "stringUnit" : {
-            "state" : "translated",
-            "value" : "TransTrans"
+            "state" : "needs_review",
+            "value" : "Trans²"
           }
         }
       }
@@ -44,13 +56,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "TransTrans uses the microphone for real-time speech transcription."
+            "value" : "Trans² uses the microphone for real-time speech transcription."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TransTransはリアルタイム音声文字起こしのためにマイクを使用します。"
+            "value" : "Trans²はリアルタイム音声文字起こしのためにマイクを使用します。"
           }
         }
       }
@@ -62,13 +74,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "TransTrans uses speech recognition for real-time transcription."
+            "value" : "Trans² uses speech recognition for real-time transcription."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TransTransはリアルタイム文字起こしのために音声認識を使用します。"
+            "value" : "Trans²はリアルタイム文字起こしのために音声認識を使用します。"
           }
         }
       }

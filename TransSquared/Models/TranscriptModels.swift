@@ -24,9 +24,9 @@ enum PermissionIssue: Identifiable {
     var message: String {
         switch self {
         case .microphone:
-            return String(localized: "TransTrans needs microphone access for speech transcription. Please enable it in System Settings > Privacy & Security > Microphone.")
+            return String(localized: "Trans² needs microphone access for speech transcription. Please enable it in System Settings > Privacy & Security > Microphone.")
         case .speechRecognition:
-            return String(localized: "TransTrans needs speech recognition access for transcription. Please enable it in System Settings > Privacy & Security > Speech Recognition.")
+            return String(localized: "Trans² needs speech recognition access for transcription. Please enable it in System Settings > Privacy & Security > Speech Recognition.")
         }
     }
 }

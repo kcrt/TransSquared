@@ -1,8 +1,8 @@
-# TransTrans
+# Trans²
 
-A macOS application for real-time speech transcription and translation. TransTrans captures microphone audio, transcribes speech using Apple's Speech framework, and translates it into a target language using Apple's Translation framework — all in real-time.
+A macOS application for real-time speech transcription and translation. Trans² captures microphone audio, transcribes speech using Apple's Speech framework, and translates it into a target language using Apple's Translation framework — all in real-time.
 
-![TransTrans Screenshot](screenshot.png)
+![Trans² Screenshot](screenshot.png)
 
 ## Features
 
@@ -31,11 +31,11 @@ A macOS application for real-time speech transcription and translation. TransTra
 - **Keep a quiet environment** — Background noise (air conditioning, music, conversation) degrades recognition quality. Use a directional microphone if possible.
 - **Speak clearly at a steady pace** — Avoid speaking too quickly or mumbling. Slight pauses between sentences help the recognizer segment text correctly.
 - **Stay close to the microphone** — Keep a consistent distance of 15–30 cm from the microphone. Too far reduces signal quality; too close may cause clipping.
-- **Check audio levels** — Use the audio level indicator in TransTrans to verify that your microphone is picking up speech at an appropriate level. Green is good; consistently red indicates the signal is too loud.
+- **Check audio levels** — Use the audio level indicator in Trans² to verify that your microphone is picking up speech at an appropriate level. Green is good; consistently red indicates the signal is too loud.
 
 ## Recognizing Audio from Your Computer
 
-TransTrans captures audio from a microphone input. To transcribe audio playing on your Mac (e.g., a video call, a lecture video), you have two options:
+Trans² captures audio from a microphone input. To transcribe audio playing on your Mac (e.g., a video call, a lecture video), you have two options:
 
 ### Option 1: macOS Live Captions (simplest)
 
@@ -43,22 +43,22 @@ macOS has built-in Live Captions that can transcribe system audio directly. Go t
 
 ### Option 2: Virtual Audio Device (for translation)
 
-To route system audio into TransTrans for both transcription and translation, use a virtual audio loopback driver such as [BlackHole](https://existential.audio/blackhole/):
+To route system audio into Trans² for both transcription and translation, use a virtual audio loopback driver such as [BlackHole](https://existential.audio/blackhole/):
 
 1. Install BlackHole (2ch is sufficient).
 2. Open **Audio MIDI Setup** (in /Applications/Utilities).
 3. Create a **Multi-Output Device** that includes both your speakers/headphones and BlackHole.
 4. Set this Multi-Output Device as your system output.
-5. In TransTrans, select **BlackHole** as the microphone input (via Transcription → Microphone menu).
+5. In Trans², select **BlackHole** as the microphone input (via Transcription → Microphone menu).
 
-This way, system audio is sent to both your speakers and TransTrans simultaneously.
+This way, system audio is sent to both your speakers and Trans² simultaneously.
 
 ## Privacy
 
-TransTrans processes all speech and translation **on your device**. Your audio and text are not sent to external servers.
+Trans² processes all speech and translation **on your device**. Your audio and text are not sent to external servers.
 
 - **Translation** — Apple's Translation framework documentation states: *"All translations using the `TranslationSession` class are processed on the user's device."* Apple may collect API usage metrics (such as app bundle ID and language pair) but does not collect the original or translated content.
-- **Speech recognition** — TransTrans uses the on-device `SpeechTranscriber` / `SpeechAnalyzer` API with locally downloaded models. Audio data is processed entirely on your device.
+- **Speech recognition** — Trans² uses the on-device `SpeechTranscriber` / `SpeechAnalyzer` API with locally downloaded models. Audio data is processed entirely on your device.
 
 ## Supported Languages
 
@@ -83,7 +83,7 @@ Available languages depend on the models Apple provides for each framework. Lang
 
 ## Language Models
 
-TransTrans uses on-device models for both speech recognition and translation.
+Trans² uses on-device models for both speech recognition and translation.
 Models are downloaded automatically when you select a language that is not yet
 installed — a cloud icon (☁️↓) indicates languages that need downloading, and a
 progress indicator appears during download.
@@ -96,12 +96,12 @@ progress indicator appears during download.
 ## Troubleshooting
 
 ### Microphone is not recognized / No audio input
-- Open **System Settings → Privacy & Security → Microphone** and ensure TransTrans has permission.
+- Open **System Settings → Privacy & Security → Microphone** and ensure Trans² has permission.
 - Check that the correct microphone is selected in the **Transcription → Microphone** menu.
 - If using an external microphone, verify it is properly connected and recognized by the system (check **System Settings → Sound → Input**).
 
 ### Transcription does not start
-- Ensure **System Settings → Privacy & Security → Speech Recognition** permission is granted to TransTrans.
+- Ensure **System Settings → Privacy & Security → Speech Recognition** permission is granted to Trans².
 - The speech model for the selected language may still be downloading. Wait for the cloud icon (☁️↓) to disappear.
 
 ### Translation is not displayed
@@ -115,7 +115,7 @@ progress indicator appears during download.
 
 ## Feedback & Bug Reports
 
-Found a bug or have a suggestion? Please report it on [GitHub Issues](https://github.com/kcrt/TransTrans/issues). You can also access this link from the app's **Help** menu.
+Found a bug or have a suggestion? Please report it on [GitHub Issues](https://github.com/kcrt/TransSquared/issues). You can also access this link from the app's **Help** menu.
 
 ## Documentation
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-TransTrans uses on-device models for both speech recognition and translation.
+Trans² uses on-device models for both speech recognition and translation.
 These models may or may not be downloaded on the user's device. The app checks
 download status at startup and displays a cloud icon next to languages that
 require a download, so users know before starting a session.

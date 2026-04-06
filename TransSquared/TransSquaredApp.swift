@@ -42,7 +42,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct TransTransApp: App {
+struct TransSquaredApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {

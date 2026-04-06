@@ -2,7 +2,7 @@
 
 ## Overview
 
-TransTrans runs two independent audio pipelines in parallel:
+Trans² runs two independent audio pipelines in parallel:
 
 1. **Analysis path** — Converts microphone audio to a Speech framework-compatible format for real-time transcription
 2. **Recording path** — Encodes `CMSampleBuffer` to AAC and saves to an m4a file
