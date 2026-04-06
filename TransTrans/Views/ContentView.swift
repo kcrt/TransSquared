@@ -153,22 +153,22 @@ struct ContentView: View {
 
     @ViewBuilder
     private var contextMenuItems: some View {
-        Button("Copy All (Original)") {
+        Button(String(localized: "Copy All (Original)", comment: "Context menu item to copy all original transcription")) {
             NSPasteboard.general.copyString(viewModel.copyAllOriginal())
         }
-        Button("Copy All (Translation)") {
+        Button(String(localized: "Copy All (Translation)", comment: "Context menu item to copy all translated text")) {
             NSPasteboard.general.copyString(viewModel.copyAllTranslation())
         }
-        Button("Copy All (Interleaved)") {
+        Button(String(localized: "Copy All (Interleaved)", comment: "Context menu item to copy original and translation interleaved")) {
             NSPasteboard.general.copyString(viewModel.copyAllInterleaved())
         }
         Divider()
-        Menu("Save Transcript") {
+        Menu(String(localized: "Save Transcript", comment: "Context menu item to save transcript")) {
             SaveTranscriptMenuItems(viewModel: viewModel)
         }
         .disabled(!viewModel.hasTranscriptContent)
         Divider()
-        Button("Clear History") {
+        Button(String(localized: "Clear History", comment: "Context menu item to clear all transcript history")) {
             viewModel.clearHistory()
         }
         .disabled(viewModel.isSessionActive)

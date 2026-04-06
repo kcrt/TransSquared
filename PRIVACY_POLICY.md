@@ -16,7 +16,9 @@ All processing occurs entirely on your device using Apple's built-in frameworks.
 
 - The App accesses your microphone solely for real-time speech transcription.
 - Audio is processed on-device using Apple's Speech Recognition framework.
-- Audio data is not recorded, saved to disk, or sent to any server.
+- During a transcription session, audio is temporarily recorded to a local file on your device to enable playback and export features. These temporary files are stored in the system temporary directory and are automatically removed when you clear the transcript history or close the App.
+- You may explicitly choose to export the recorded audio to a file on your Mac.
+- Audio data is never sent to any external server.
 - Transcription and translation results are held in memory during the session and discarded when you close the App, unless you explicitly choose to save them to a file on your Mac.
 
 ## Translation

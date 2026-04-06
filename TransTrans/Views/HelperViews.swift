@@ -82,13 +82,15 @@ struct TargetLanguageMenuContent: View {
     var body: some View {
         ForEach(viewModel.supportedTargetLanguages, id: \.minimalIdentifier) { language in
             Button {
+                guard slot < viewModel.targetLanguageIdentifiers.count else { return }
                 viewModel.targetLanguageIdentifiers[slot] = language.minimalIdentifier
                 viewModel.prepareTranslationModelIfNeeded(for: language.minimalIdentifier)
             } label: {
                 CheckmarkLabel(
                     title: Locale.current.localizedString(forIdentifier: language.minimalIdentifier)
                         ?? language.minimalIdentifier,
-                    isSelected: viewModel.targetLanguageIdentifiers[slot] == language.minimalIdentifier,
+                    isSelected: slot < viewModel.targetLanguageIdentifiers.count
+                        && viewModel.targetLanguageIdentifiers[slot] == language.minimalIdentifier,
                     isDownloaded: viewModel.targetLanguageDownloadStatus[language.minimalIdentifier] == true
                 )
             }

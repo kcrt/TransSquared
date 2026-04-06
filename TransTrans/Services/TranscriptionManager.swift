@@ -227,6 +227,7 @@ actor TranscriptionManager {
         logger.debug("markStopped called")
         eventContinuation?.finish()
         eventContinuation = nil
+        isRunning = false
     }
 }
 

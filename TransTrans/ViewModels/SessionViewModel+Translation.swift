@@ -20,6 +20,7 @@ extension SessionViewModel {
         logger.info("Translation session available for slot \(slot), queued: \(self.translationSlots[slot].queue.count)")
 
         // A session being provided means the translation model is installed
+        guard slot < targetLanguageIdentifiers.count else { return }
         let langId = targetLanguageIdentifiers[slot]
         if targetLanguageDownloadStatus[langId] != true {
             targetLanguageDownloadStatus[langId] = true

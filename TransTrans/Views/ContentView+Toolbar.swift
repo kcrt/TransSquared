@@ -212,7 +212,8 @@ extension ContentView {
 
     @ViewBuilder
     func targetLanguageMenu(slot: Int) -> some View {
-        let langId = viewModel.targetLanguageIdentifiers[slot]
+        let langId = slot < viewModel.targetLanguageIdentifiers.count
+            ? viewModel.targetLanguageIdentifiers[slot] : "?"
         Menu {
             TargetLanguageMenuContent(viewModel: viewModel, slot: slot)
         } label: {

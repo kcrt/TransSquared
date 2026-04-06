@@ -54,7 +54,7 @@ extension SessionViewModel {
         translationSlots[slot].queue.removeAll { $0.entryID == entryID }
 
         // Ensure translation session is available
-        if translationSlots[slot].config == nil {
+        if translationSlots[slot].config == nil, slot < targetLanguageIdentifiers.count {
             let targetLang = Locale.Language(identifier: targetLanguageIdentifiers[slot])
             translationSlots[slot].config = TranslationSession.Configuration(
                 source: sourceLocale.language,

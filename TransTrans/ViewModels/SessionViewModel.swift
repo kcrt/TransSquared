@@ -159,6 +159,9 @@ final class SessionViewModel {
     var installedSourceLocaleIdentifiers: Set<String> = []
     /// Set of source locale identifiers currently being downloaded.
     var downloadingSourceLocaleIdentifiers: Set<String> = []
+    /// Task handles for in-progress speech asset downloads, keyed by locale identifier.
+    /// Used to support real cancellation from `toggleSession()`.
+    var speechDownloadTasks: [String: Task<Void, Never>] = [:]
     var supportedTargetLanguages: [Locale.Language] = []
     /// Whether each target language is installed on device, keyed by minimalIdentifier.
     /// Status depends on the current source language (rebuilt by `updateTargetLanguages()`).
@@ -631,8 +634,10 @@ final class SessionViewModel {
     }
 
     func toggleSession() {
-        // If the current source language is downloading, cancel the download (visually)
+        // If the current source language is downloading, cancel the download
         if downloadingSourceLocaleIdentifiers.contains(sourceLocaleIdentifier) {
+            speechDownloadTasks[sourceLocaleIdentifier]?.cancel()
+            speechDownloadTasks.removeValue(forKey: sourceLocaleIdentifier)
             downloadingSourceLocaleIdentifiers.remove(sourceLocaleIdentifier)
             return
         }
@@ -692,7 +697,8 @@ final class SessionViewModel {
         // Look up the translation text for this entry and slot
         guard let idx = entryIndex(for: entryID),
               let translation = entries[idx].translations[slot],
-              !translation.text.isEmpty else { return }
+              !translation.text.isEmpty,
+              slot < targetLanguageIdentifiers.count else { return }
 
         let language = targetLanguageIdentifiers[slot]
         speechSynthesisService.speak(text: translation.text, language: language, entryID: entryID)
@@ -783,8 +789,18 @@ final class SessionViewModel {
         let storedCount = defaults.integer(forKey: "targetCount")
         self.targetCount = (1...Self.maxTargetCount).contains(storedCount) ? storedCount : 1
 
-        if let stored = defaults.array(forKey: "targetLanguageIdentifiers") as? [String], stored.count >= Self.maxTargetCount {
-            self.targetLanguageIdentifiers = stored
+        if let stored = defaults.array(forKey: "targetLanguageIdentifiers") as? [String], !stored.isEmpty {
+            if stored.count >= Self.maxTargetCount {
+                self.targetLanguageIdentifiers = stored
+            } else {
+                // Pad with defaults to maintain maxTargetCount elements
+                var padded = stored
+                let defaults = Self.initialTargetLanguageIdentifiers
+                while padded.count < Self.maxTargetCount {
+                    padded.append(defaults[padded.count % defaults.count])
+                }
+                self.targetLanguageIdentifiers = padded
+            }
         }
     }
 }

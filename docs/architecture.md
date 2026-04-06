@@ -7,7 +7,7 @@ TransTransApp
 └── ContentView
     ├── ContentView+Toolbar (native macOS toolbar: record, save, display, language, font)
     ├── MenuCommands (global menu bar commands & shortcuts)
-    ├── TranscriptPaneView (×N: source + up to 3 targets)
+    ├── TranscriptPaneView (×N: source + up to 10 targets)
     ├── SettingsView (custom vocabulary sheet)
     ├── SubtitleWindowController (borderless overlay window)
     │   └── SubtitleOverlayView (subtitle-style translation display)

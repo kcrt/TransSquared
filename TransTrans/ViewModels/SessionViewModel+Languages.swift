@@ -15,23 +15,36 @@ extension SessionViewModel {
         guard !installedSourceLocaleIdentifiers.contains(locale.identifier),
               !downloadingSourceLocaleIdentifiers.contains(locale.identifier) else { return }
         downloadingSourceLocaleIdentifiers.insert(locale.identifier)
-        Task.detached {
+        let localeID = locale.identifier
+        let task = Task.detached {
             let transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
+            let succeeded: Bool
             do {
                 if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-                    logger.info("Starting speech asset download for \(locale.identifier)")
+                    try Task.checkCancellation()
+                    logger.info("Starting speech asset download for \(localeID)")
                     try await request.downloadAndInstall()
-                    logger.info("Speech asset download completed for \(locale.identifier)")
+                    logger.info("Speech asset download completed for \(localeID)")
                 }
+                succeeded = true
+            } catch is CancellationError {
+                logger.info("Speech asset download cancelled for \(localeID)")
+                succeeded = false
             } catch {
-                logger.error("Speech asset download failed for \(locale.identifier): \(error.localizedDescription)")
+                logger.error("Speech asset download failed for \(localeID): \(error.localizedDescription)")
+                succeeded = false
             }
+            let didSucceed = succeeded
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                self.downloadingSourceLocaleIdentifiers.remove(locale.identifier)
-                self.installedSourceLocaleIdentifiers.insert(locale.identifier)
+                self.downloadingSourceLocaleIdentifiers.remove(localeID)
+                self.speechDownloadTasks.removeValue(forKey: localeID)
+                if didSucceed {
+                    self.installedSourceLocaleIdentifiers.insert(localeID)
+                }
             }
         }
+        speechDownloadTasks[locale.identifier] = task
     }
 
     /// Triggers a proactive translation model download for the given target language.
