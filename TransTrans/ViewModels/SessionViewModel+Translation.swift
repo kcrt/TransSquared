@@ -19,12 +19,61 @@ extension SessionViewModel {
         }
         logger.info("Translation session available for slot \(slot), queued: \(self.translationSlots[slot].queue.count)")
 
+        // A session being provided means the translation model is installed
+        let langId = targetLanguageIdentifiers[slot]
+        if targetLanguageDownloadStatus[langId] != true {
+            targetLanguageDownloadStatus[langId] = true
+        }
+
         // Process queued translations using the session provided by the closure.
         // Re-check bounds after each await since translationSlots may be rebuilt.
         while slot < translationSlots.count && !translationSlots[slot].queue.isEmpty {
             let item = translationSlots[slot].queue.removeFirst()
             await translateSentence(item.sentence, using: session, slot: slot, entryID: item.entryID, isPartial: item.isPartial)
         }
+    }
+
+    // MARK: - Translation Model Preparation
+
+    /// Maximum number of retries for `prepareTranslation()` when the translationd daemon connection is interrupted.
+    private static let preparationMaxRetries = 2
+    /// Delay between retries to allow the translationd daemon to recover.
+    private static let preparationRetryDelay: Duration = .seconds(1)
+
+    /// Called from the preparation `.translationTask()` modifier when a session is available for proactive download.
+    func handleTranslationPreparationSession(_ session: TranslationSession) async {
+        // Session was provided — cancel the timeout/retry task since we have a live session.
+        translationPreparationRetryTask?.cancel()
+        translationPreparationRetryTask = nil
+
+        let langId = translationPreparationConfig?.target?.minimalIdentifier ?? ""
+        let isReadyBefore = await session.isReady
+        logger.info("Translation preparation session available for '\(langId)' (isReady=\(isReadyBefore), canRequestDownloads=\(session.canRequestDownloads))")
+
+        for attempt in 1...Self.preparationMaxRetries {
+            do {
+                try await session.prepareTranslation()
+            } catch {
+                logger.error("Translation preparation attempt \(attempt) failed for '\(langId)': \(error.localizedDescription)")
+                break
+            }
+
+            let isReadyAfter = await session.isReady
+            if isReadyAfter {
+                targetLanguageDownloadStatus[langId] = true
+                logger.info("Translation model prepared and ready for '\(langId)' (attempt \(attempt))")
+                translationPreparationConfig = nil
+                return
+            }
+
+            if attempt < Self.preparationMaxRetries {
+                logger.info("prepareTranslation() returned but session not ready for '\(langId)' — retrying in \(Self.preparationRetryDelay) (attempt \(attempt)/\(Self.preparationMaxRetries))")
+                try? await Task.sleep(for: Self.preparationRetryDelay)
+            }
+        }
+
+        logger.warning("Translation preparation exhausted retries for '\(langId)' — model not ready")
+        translationPreparationConfig = nil
     }
 
     // MARK: - Translation Queue

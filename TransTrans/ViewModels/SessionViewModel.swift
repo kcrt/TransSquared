@@ -49,6 +49,7 @@ final class SessionViewModel {
         }
     }
     var isSessionActive = false
+    
 
     // MARK: - Recording State
 
@@ -178,7 +179,20 @@ final class SessionViewModel {
     }
 
     var supportedSourceLocales: [Locale] = []
+    /// Set of source locale identifiers that are installed on device (no download needed).
+    var installedSourceLocaleIdentifiers: Set<String> = []
+    /// Set of source locale identifiers currently being downloaded.
+    var downloadingSourceLocaleIdentifiers: Set<String> = []
     var supportedTargetLanguages: [Locale.Language] = []
+    /// Whether each target language is installed on device, keyed by minimalIdentifier.
+    /// Status depends on the current source language (rebuilt by `updateTargetLanguages()`).
+    var targetLanguageDownloadStatus: [String: Bool] = [:]
+    /// Configuration for proactively downloading translation models via `prepareTranslation()`.
+    /// Set by `prepareTranslationModelIfNeeded(for:)`, consumed by the `.translationTask()` in ContentView.
+    var translationPreparationConfig: TranslationSession.Configuration?
+    /// Timeout task that retries translation preparation if the `.translationTask()` closure is never called
+    /// (e.g. when the `translationd` daemon crashes before providing a session).
+    var translationPreparationRetryTask: Task<Void, Never>?
 
     // Microphone selection
     var availableMicrophones: [AVCaptureDevice] = []
@@ -370,8 +384,11 @@ final class SessionViewModel {
 
     func loadSupportedLocales() async {
         logger.info("Loading supported locales...")
-        supportedSourceLocales = await SpeechTranscriber.supportedLocales
-        logger.info("Found \(self.supportedSourceLocales.count) supported source locales")
+        async let supported = SpeechTranscriber.supportedLocales
+        async let installed = SpeechTranscriber.installedLocales
+        supportedSourceLocales = await supported
+        installedSourceLocaleIdentifiers = Set(await installed.map(\.identifier))
+        logger.info("Found \(self.supportedSourceLocales.count) supported, \(self.installedSourceLocaleIdentifiers.count) installed source locales")
         await updateTargetLanguages()
 
         // Ensure initial selection is valid
@@ -382,6 +399,12 @@ final class SessionViewModel {
             }
         }
         logger.info("Source locale: \(self.sourceLocaleIdentifier), Target language: \(self.targetLanguageIdentifier)")
+    }
+
+    /// Refreshes only the installed-status set for source locales (lightweight, no full reload).
+    func refreshSourceLocaleInstallStatus() async {
+        let installed = await SpeechTranscriber.installedLocales
+        installedSourceLocaleIdentifiers = Set(installed.map(\.identifier))
     }
 
     // MARK: - Session Control
@@ -398,6 +421,68 @@ final class SessionViewModel {
         guard await checkPermissions() else {
             logger.info("Session start aborted: missing permissions")
             return
+        }
+
+        // Verify speech recognition assets are installed before starting.
+        // Check our own downloading set first — AssetInventory.status may not
+        // report .downloading if the request was issued by a detached Task.
+        let isDownloadingLocally = downloadingSourceLocaleIdentifiers.contains(sourceLocaleIdentifier)
+        let transcriber = SpeechTranscriber(locale: sourceLocale, preset: .timeIndexedProgressiveTranscription)
+        let assetStatus = await AssetInventory.status(forModules: [transcriber])
+        logger.info("Asset status for \(self.sourceLocaleIdentifier): \(String(describing: assetStatus)), localDownloading: \(isDownloadingLocally)")
+
+        if assetStatus != .installed {
+            if isDownloadingLocally || assetStatus == .downloading {
+                logger.info("Session start aborted: speech assets still downloading for \(self.sourceLocaleIdentifier)")
+                errorMessage = String(
+                    localized: "Speech recognition model is still downloading. Please wait and try again.",
+                    comment: "Error shown when speech model is still downloading at session start"
+                )
+                return
+            } else if assetStatus == .supported {
+                logger.info("Session start aborted: speech assets not installed for \(self.sourceLocaleIdentifier)")
+                errorMessage = String(
+                    localized: "Speech recognition model is not installed. Please select the language again to start the download.",
+                    comment: "Error shown when user tries to start a session without the required speech model"
+                )
+                downloadSpeechAssetsIfNeeded(for: sourceLocale)
+                return
+            } else if assetStatus == .unsupported {
+                logger.info("Session start aborted: speech assets unsupported for \(self.sourceLocaleIdentifier)")
+                errorMessage = String(
+                    localized: "Speech recognition is not supported for this language.",
+                    comment: "Error shown when the selected language is not supported for speech recognition"
+                )
+                return
+            }
+        }
+
+        // Verify translation models are installed for all active target languages.
+        let translationAvailability = LanguageAvailability()
+        for i in 0..<targetCount {
+            let targetLangId = targetLanguageIdentifiers[i]
+            let targetLang = Locale.Language(identifier: targetLangId)
+            let translationStatus = await translationAvailability.status(
+                from: sourceLocale.language, to: targetLang
+            )
+            logger.info("Translation status for \(self.sourceLocaleIdentifier)→\(targetLangId): \(String(describing: translationStatus))")
+            if translationStatus != .installed {
+                // LanguageAvailability.status() may report .supported even when the model is usable
+                // (e.g. shared models across different source languages). Trust the preparation
+                // result if it already confirmed readiness via session.isReady.
+                if targetLanguageDownloadStatus[targetLangId] == true {
+                    logger.info("LanguageAvailability reports .supported for \(targetLangId) but preparation confirmed readiness — proceeding")
+                } else {
+                    let langName = Locale.current.localizedString(forIdentifier: targetLangId) ?? targetLangId
+                    logger.info("Session start aborted: translation model not installed for \(targetLangId)")
+                    errorMessage = String(
+                        localized: "Translation model for \(langName) is not installed. Please select the language from the menu to download, or install it from System Settings > General > Language & Region > Translation Languages.",
+                        comment: "Error shown when translation model is not installed at session start"
+                    )
+                    prepareTranslationModelIfNeeded(for: targetLangId)
+                    return
+                }
+            }
         }
 
         errorMessage = nil
@@ -552,9 +637,17 @@ final class SessionViewModel {
         audioLevelRingBuffer = Array(repeating: 0, count: Self.audioLevelSampleCount)
         audioLevelWriteIndex = 0
         logger.info("Session stopped (entries: \(self.entries.count))")
+
+        // Refresh download status — models may have been downloaded during the session
+        await refreshSourceLocaleInstallStatus()
     }
 
     func toggleSession() {
+        // If the current source language is downloading, cancel the download (visually)
+        if downloadingSourceLocaleIdentifiers.contains(sourceLocaleIdentifier) {
+            downloadingSourceLocaleIdentifiers.remove(sourceLocaleIdentifier)
+            return
+        }
         Task {
             if isSessionActive {
                 await stopSession()

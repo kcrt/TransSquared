@@ -36,11 +36,17 @@ extension ContentView {
             Button {
                 viewModel.toggleSession()
             } label: {
-                Image(nsImage: Self.redSymbol(named: sessionButtonIcon))
-                    .symbolEffect(.pulse, options: .repeating, isActive: shouldBlinkRecordIcon)
-                    .accessibilityLabel(viewModel.isSessionActive ? "Stop" : "Start")
+                if isSourceLanguageDownloading {
+                    Image(systemName: "arrow.down.circle")
+                        .symbolEffect(.wiggle.byLayer, options: .repeat(.periodic(delay: 0.0)))
+                        .accessibilityLabel("Downloading")
+                } else {
+                    Image(nsImage: Self.redSymbol(named: sessionButtonIcon))
+                        .symbolEffect(.pulse, options: .repeating, isActive: shouldBlinkRecordIcon)
+                        .accessibilityLabel(viewModel.isSessionActive ? "Stop" : "Start")
+                }
             }
-            .help(viewModel.isSessionActive ? "Stop (⌘R)" : "Start (⌘R)")
+            .help(sessionButtonHelp)
 
             Menu {
                 Button {
@@ -119,19 +125,28 @@ extension ContentView {
                     Button {
                         logger.info("Source language selected: '\(locale.identifier)' (was '\(viewModel.sourceLocaleIdentifier)')")
                         viewModel.sourceLocaleIdentifier = locale.identifier
+                        viewModel.downloadSpeechAssetsIfNeeded(for: locale)
                         Task {
                             await viewModel.updateTargetLanguages()
                         }
                     } label: {
                         CheckmarkLabel(
                             title: locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier,
-                            isSelected: viewModel.sourceLocaleIdentifier == locale.identifier
+                            isSelected: viewModel.sourceLocaleIdentifier == locale.identifier,
+                            isDownloaded: viewModel.installedSourceLocaleIdentifiers.contains(locale.identifier),
+                            isDownloading: viewModel.downloadingSourceLocaleIdentifiers.contains(locale.identifier)
                         )
                     }
                 }
             } label: {
-                Text(sourceLanguageLabel)
-                    .fontWeight(.medium)
+                HStack(spacing: 4) {
+                    Text(sourceLanguageLabel)
+                        .fontWeight(.medium)
+                    if viewModel.downloadingSourceLocaleIdentifiers.contains(viewModel.sourceLocaleIdentifier) {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
             }
             .disabled(viewModel.isSessionActive)
             .help("Source Language")
@@ -219,10 +234,12 @@ extension ContentView {
                 Button {
                     logger.info("Target \(slot) selected: '\(language.minimalIdentifier)' (was '\(viewModel.targetLanguageIdentifiers[slot])')")
                     viewModel.targetLanguageIdentifiers[slot] = language.minimalIdentifier
+                    viewModel.prepareTranslationModelIfNeeded(for: language.minimalIdentifier)
                 } label: {
                     CheckmarkLabel(
                         title: displayName(for: language),
-                        isSelected: viewModel.targetLanguageIdentifiers[slot] == language.minimalIdentifier
+                        isSelected: viewModel.targetLanguageIdentifiers[slot] == language.minimalIdentifier,
+                        isDownloaded: viewModel.targetLanguageDownloadStatus[language.minimalIdentifier] == true
                     )
                 }
             }
@@ -240,8 +257,19 @@ extension ContentView {
         viewModel.isSessionActive ? "stop.fill" : "circle.fill"
     }
 
+    private var isSourceLanguageDownloading: Bool {
+        viewModel.downloadingSourceLocaleIdentifiers.contains(viewModel.sourceLocaleIdentifier)
+    }
+
     private var shouldBlinkRecordIcon: Bool {
         viewModel.isSessionActive
+    }
+
+    private var sessionButtonHelp: String {
+        if isSourceLanguageDownloading {
+            return String(localized: "Downloading speech model… Click to cancel.")
+        }
+        return viewModel.isSessionActive ? "Stop (⌘R)" : "Start (⌘R)"
     }
 
     /// Creates an SF Symbol NSImage tinted red with `isTemplate = false`

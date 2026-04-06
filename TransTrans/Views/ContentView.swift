@@ -51,6 +51,7 @@ struct ContentView: View {
             toolbarContent
         }
         .modifier(TranslationTaskSlots(viewModel: viewModel))
+        .modifier(TranslationPreparation(viewModel: viewModel))
         .task {
             await viewModel.loadSupportedLocales()
         }
@@ -199,6 +200,21 @@ private struct TranslationTaskSlots: ViewModifier {
 
     private func slotConfig(_ slot: Int) -> TranslationSession.Configuration? {
         viewModel.translationSlots.indices.contains(slot) ? viewModel.translationSlots[slot].config : nil
+    }
+}
+
+// MARK: - Translation Model Preparation (proactive download trigger)
+
+/// Attaches a `.translationTask` for proactively preparing (downloading) translation models
+/// when the user selects a target language that is not yet installed.
+private struct TranslationPreparation: ViewModifier {
+    var viewModel: SessionViewModel
+
+    func body(content: Content) -> some View {
+        content
+            .translationTask(viewModel.translationPreparationConfig) { session in
+                await viewModel.handleTranslationPreparationSession(session)
+            }
     }
 }
 

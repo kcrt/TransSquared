@@ -51,3 +51,4 @@ Open `TransTrans.xcodeproj` in Xcode and build the project (⌘B).
 - [TranscriptEntry Data Model](TranscriptEntry.md)
 - [Audio Capture & Recording Architecture](audio_capture.md)
 - [Translation Pipeline](translation_pipeline.md)
+- [Language Model Availability](language_availability.md)

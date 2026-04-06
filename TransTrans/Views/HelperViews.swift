@@ -52,14 +52,21 @@ struct SaveTranscriptMenuItems: View {
 
 // MARK: - Checkmark Menu Item Label
 
-/// A menu button label that shows a checkmark when selected.
+/// A menu button label that shows a checkmark when selected, a cloud icon when not downloaded,
+/// or a progress indicator when downloading.
 struct CheckmarkLabel: View {
     let title: String
     let isSelected: Bool
+    var isDownloaded: Bool = true
+    var isDownloading: Bool = false
 
     var body: some View {
         if isSelected {
             Label(title, systemImage: "checkmark")
+        } else if isDownloading {
+            Label(title, systemImage: "arrow.down.circle")
+        } else if !isDownloaded {
+            Label(title, systemImage: "icloud.and.arrow.down")
         } else {
             Text(title)
         }

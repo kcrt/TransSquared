@@ -42,6 +42,41 @@ ForEach(0..<maxTranslationSlots, id: \.self) { slot in
 - When the config is invalidated (changed), SwiftUI provides a fresh `TranslationSession`
 - The session callback calls `handleTranslationSession`, which drains the queue
 
+## Session Start: Model Availability Check
+
+Before creating translation slots, `startSession()` verifies that all active target
+languages have installed translation models using
+`LanguageAvailability.status(from:to:)`. If any target model is not `.installed`,
+the session is aborted with an error message and `prepareTranslationModelIfNeeded()`
+triggers a system download dialog for the missing language.
+
+This check uses the **source→target pair** — translation model availability depends
+on both the source and target language. The `targetLanguageDownloadStatus` dictionary
+(rebuilt by `updateTargetLanguages()` whenever the source changes) tracks this
+pair-dependent status.
+
+## Model Preparation (Proactive Download)
+
+A separate `TranslationPreparation` view modifier in `ContentView` attaches a
+`.translationTask()` driven by `translationPreparationConfig`. When the user selects
+an uninstalled target language, `prepareTranslationModelIfNeeded(for:)` sets this
+config, triggering `session.prepareTranslation()` which shows a system download
+dialog. After `prepareTranslation()` returns, `session.isReady` is checked to verify
+the model was actually installed (since `prepareTranslation()` returns without
+prompting if the model is "in the middle of downloading"). Only when `isReady` is
+`true` does the cloud icon disappear.
+
+The preparation includes two layers of retry:
+1. **Within the session**: If `prepareTranslation()` returns but `isReady=false`,
+   retry up to 2 times with a 1-second delay (handles transient daemon failures).
+2. **Session creation timeout**: If `.translationTask()` never provides a session
+   (daemon crashed before session creation), a 5-second timeout detects this and
+   retries by cycling the config through nil→re-set.
+
+**Known issue**: The `translationd` daemon crashes for certain language pairs,
+causing the download dialog to flash briefly and disappear. See
+`docs/TRANSLATION_MODEL_PROBLEM.md` for details.
+
 ## Slot Lifecycle
 
 ```
@@ -196,4 +231,5 @@ a session (e.g., language model update), pending work is not lost.
 | `ViewModels/SessionViewModel+Translation.swift` | Queue management, translation execution |
 | `ViewModels/SessionViewModel+Transcription.swift` | Event handling that feeds the translation pipeline |
 | `ViewModels/SessionViewModel+Editing.swift` | Re-translation after manual text edits |
-| `Views/ContentView.swift` | `.translationTask()` view modifier attachment |
+| `ViewModels/SessionViewModel+Languages.swift` | `prepareTranslationModelIfNeeded(for:)` — proactive download trigger |
+| `Views/ContentView.swift` | `TranslationTaskSlots` — per-slot `.translationTask()`; `TranslationPreparation` — proactive model download |

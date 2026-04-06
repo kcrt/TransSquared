@@ -31,6 +31,18 @@ A macOS application for real-time speech transcription and translation. TransTra
 | ⌘− | Decrease font size |
 | ⌘, | Settings (custom vocabulary) |
 
+## Language Models
+
+TransTrans uses on-device models for both speech recognition and translation.
+Models are downloaded automatically when you select a language that is not yet
+installed — a cloud icon (☁️↓) indicates languages that need downloading, and a
+progress indicator appears during download.
+
+### Managing Downloaded Models
+
+- **Translation models** — Open **System Settings → General → Language & Region → Translation Languages** to view, download, or remove translation language packs.
+- **Speech recognition models** — Managed automatically by the system. There is no user-facing UI to delete them. The system may reclaim storage for models that have not been used recently.
+
 ## Documentation
 
 Technical documentation (architecture, audio pipeline, translation pipeline, etc.) is available in the [`docs/`](docs/) directory.
