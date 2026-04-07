@@ -219,28 +219,19 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
 
     /// Accumulates small PCM buffers into a larger one before yielding to the analyzer.
     private func accumulateAndYield(_ buffer: AVAudioPCMBuffer) {
-        // Lazily create the accumulation buffer
         if accumulationBuffer == nil {
-            accumulationBuffer = AVAudioPCMBuffer(
-                pcmFormat: targetFormat,
-                frameCapacity: Self.accumulationFrameCount
-            )
-            accumulationBuffer?.frameLength = 0
-            accumulatedFrames = 0
+            resetAccumulationBuffer()
         }
 
         guard let accumBuf = accumulationBuffer,
               let srcFloat = buffer.floatChannelData,
               let dstFloat = accumBuf.floatChannelData else {
-            // Fallback: yield directly if accumulation is not possible
             continuation.yield(AnalyzerInput(buffer: buffer))
             return
         }
 
         let framesToCopy = min(buffer.frameLength, Self.accumulationFrameCount - accumulatedFrames)
         let channelCount = Int(targetFormat.channelCount)
-
-        // Validate channel counts match actual buffer data to prevent out-of-bounds access
         let srcChannels = Int(buffer.format.channelCount)
         let dstChannels = Int(accumBuf.format.channelCount)
         let safeChannelCount = min(channelCount, srcChannels, dstChannels)
@@ -251,41 +242,49 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
             return
         }
 
-        for ch in 0..<safeChannelCount {
-            let src = srcFloat[ch]
-            let dst = dstFloat[ch].advanced(by: Int(accumulatedFrames))
-            memcpy(dst, src, Int(framesToCopy) * MemoryLayout<Float>.size)
-        }
+        copyFrames(from: srcFloat, to: dstFloat, channelCount: safeChannelCount,
+                    srcOffset: 0, dstOffset: Int(accumulatedFrames), frameCount: Int(framesToCopy))
         accumulatedFrames += framesToCopy
         accumBuf.frameLength = accumulatedFrames
 
-        if accumulatedFrames >= Self.accumulationFrameCount {
-            // Yield the full accumulation buffer
-            continuation.yield(AnalyzerInput(buffer: accumBuf))
+        guard accumulatedFrames >= Self.accumulationFrameCount else { return }
 
-            // Reset for next accumulation
-            accumulationBuffer = AVAudioPCMBuffer(
-                pcmFormat: targetFormat,
-                frameCapacity: Self.accumulationFrameCount
-            )
-            accumulationBuffer?.frameLength = 0
-            accumulatedFrames = 0
+        continuation.yield(AnalyzerInput(buffer: accumBuf))
+        resetAccumulationBuffer()
 
-            // Handle leftover frames from this buffer that didn't fit
-            let leftover = buffer.frameLength - framesToCopy
-            if leftover > 0 {
-                guard let newAccumBuf = accumulationBuffer,
-                      let newDstFloat = newAccumBuf.floatChannelData,
-                      Int(leftover) <= Int(newAccumBuf.frameCapacity) else { return }
-                let newDstChannels = Int(newAccumBuf.format.channelCount)
-                let safeLeftoverChannels = min(safeChannelCount, newDstChannels)
-                for ch in 0..<safeLeftoverChannels {
-                    let src = srcFloat[ch].advanced(by: Int(framesToCopy))
-                    memcpy(newDstFloat[ch], src, Int(leftover) * MemoryLayout<Float>.size)
-                }
-                accumulatedFrames = leftover
-                newAccumBuf.frameLength = leftover
-            }
+        // Handle leftover frames from this buffer that didn't fit
+        let leftover = buffer.frameLength - framesToCopy
+        guard leftover > 0,
+              let newAccumBuf = accumulationBuffer,
+              let newDstFloat = newAccumBuf.floatChannelData,
+              Int(leftover) <= Int(newAccumBuf.frameCapacity) else { return }
+
+        let newDstChannels = Int(newAccumBuf.format.channelCount)
+        let safeLeftoverChannels = min(safeChannelCount, newDstChannels)
+        copyFrames(from: srcFloat, to: newDstFloat, channelCount: safeLeftoverChannels,
+                    srcOffset: Int(framesToCopy), dstOffset: 0, frameCount: Int(leftover))
+        accumulatedFrames = leftover
+        newAccumBuf.frameLength = leftover
+    }
+
+    private func resetAccumulationBuffer() {
+        accumulationBuffer = AVAudioPCMBuffer(
+            pcmFormat: targetFormat,
+            frameCapacity: Self.accumulationFrameCount
+        )
+        accumulationBuffer?.frameLength = 0
+        accumulatedFrames = 0
+    }
+
+    private func copyFrames(
+        from src: UnsafePointer<UnsafeMutablePointer<Float>>,
+        to dst: UnsafePointer<UnsafeMutablePointer<Float>>,
+        channelCount: Int, srcOffset: Int, dstOffset: Int, frameCount: Int
+    ) {
+        for ch in 0..<channelCount {
+            memcpy(dst[ch].advanced(by: dstOffset),
+                   src[ch].advanced(by: srcOffset),
+                   frameCount * MemoryLayout<Float>.size)
         }
     }
 

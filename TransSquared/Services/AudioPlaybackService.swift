@@ -27,28 +27,27 @@ final class AudioPlaybackService {
         guard let player else { return }
         removeBoundaryObserver()
         let cmTime = CMTime(seconds: max(0, time), preferredTimescale: 600)
-        player.seek(to: cmTime) { [weak self] finished in
-            guard finished else { return }
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.player?.play()
-                self.isPlaying = true
-                self.playingEntryID = entryID
-                logger.debug("Playing from \(String(format: "%.1f", time))s duration=\(duration.map { String(format: "%.1f", $0) } ?? "nil") (entry: \(entryID))")
+        Task {
+            await player.seek(to: cmTime)
+            player.play()
+            isPlaying = true
+            playingEntryID = entryID
+            logger.debug("Playing from \(String(format: "%.1f", time))s duration=\(duration.map { String(format: "%.1f", $0) } ?? "nil") (entry: \(entryID))")
 
-                // Schedule automatic stop at the end of this entry's segment
-                if let duration, let player = self.player {
-                    let endTime = CMTime(seconds: max(0, time) + duration, preferredTimescale: 600)
-                    self.boundaryObserver = player.addBoundaryTimeObserver(
-                        forTimes: [NSValue(time: endTime)],
-                        queue: .main
-                    ) { [weak self] in
-                        Task { @MainActor [weak self] in
-                            self?.stop()
-                        }
-                    }
-                }
+            if let duration {
+                scheduleBoundaryStop(at: max(0, time) + duration)
             }
+        }
+    }
+
+    private func scheduleBoundaryStop(at seconds: TimeInterval) {
+        guard let player else { return }
+        let endTime = CMTime(seconds: seconds, preferredTimescale: 600)
+        boundaryObserver = player.addBoundaryTimeObserver(
+            forTimes: [NSValue(time: endTime)], queue: .main
+        ) { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in self.stop() }
         }
     }
 

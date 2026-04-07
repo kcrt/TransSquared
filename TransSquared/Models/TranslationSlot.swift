@@ -29,14 +29,19 @@ struct TranslationSlot {
     /// will pick up new items via its `while` loop.
     var isProcessing: Bool = false
 
-    mutating func reset() {
-        queue = []
-        partialEntryID = nil
-        isProcessing = false
+    /// Clears the debounced partial translation state for this slot.
+    mutating func resetPartialState() {
         partialTranslationTimer?.cancel()
         partialTranslationTimer = nil
         pendingPartialText = nil
         pendingPartialElapsedTime = nil
+        partialEntryID = nil
+    }
+
+    mutating func reset() {
+        queue = []
+        isProcessing = false
+        resetPartialState()
         config = nil
     }
 }

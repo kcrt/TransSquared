@@ -21,12 +21,7 @@ struct ContentView: View {
                 onLineEdited: { id, newText in
                     viewModel.editSourceLine(id: id, newText: newText)
                 },
-                onTimestampTapped: { sentenceID in
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        viewModel.highlightedSentenceID =
-                            viewModel.highlightedSentenceID == sentenceID ? nil : sentenceID
-                    }
-                },
+                onTimestampTapped: toggleHighlight,
                 highlightedSentenceID: viewModel.highlightedSentenceID,
                 canPlayback: viewModel.hasRecording && !viewModel.isSessionActive,
                 playingEntryID: viewModel.playbackService?.playingEntryID,
@@ -110,10 +105,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func targetPane(slot: Int) -> some View {
-        let langId = slot < viewModel.targetLanguageIdentifiers.count
-            ? Locale.current.localizedString(forIdentifier: viewModel.targetLanguageIdentifiers[slot])
-                ?? viewModel.targetLanguageIdentifiers[slot].uppercased()
-            : "?"
+        let langId = targetLanguageDisplayName(slot: slot)
         let lines = viewModel.translationLines(forSlot: slot)
         let placeholder: String? = viewModel.isSessionActive ? nil : (
             viewModel.targetCount == 1
@@ -130,12 +122,7 @@ struct ContentView: View {
             onLineEdited: { id, newText in
                 viewModel.editTranslationLine(slot: capturedSlot, id: id, newText: newText)
             },
-            onTimestampTapped: { sentenceID in
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    viewModel.highlightedSentenceID =
-                        viewModel.highlightedSentenceID == sentenceID ? nil : sentenceID
-                }
-            },
+            onTimestampTapped: toggleHighlight,
             highlightedSentenceID: viewModel.highlightedSentenceID,
             canPlayback: true,
             playingEntryID: viewModel.speechSynthesisService.speakingEntryID,
@@ -143,6 +130,19 @@ struct ContentView: View {
                 viewModel.speakTranslation(entryID: entryID, slot: capturedSlot)
             }
         )
+    }
+
+    private func toggleHighlight(_ sentenceID: UUID) {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            viewModel.highlightedSentenceID =
+                viewModel.highlightedSentenceID == sentenceID ? nil : sentenceID
+        }
+    }
+
+    private func targetLanguageDisplayName(slot: Int) -> String {
+        guard slot < viewModel.targetLanguageIdentifiers.count else { return "?" }
+        let id = viewModel.targetLanguageIdentifiers[slot]
+        return Locale.current.localizedString(forIdentifier: id) ?? id.uppercased()
     }
 
     var sourcePlaceholder: String {

@@ -42,32 +42,14 @@ extension ContentView {
                         .accessibilityLabel("Downloading")
                 } else {
                     Image(nsImage: Self.redSymbol(named: sessionButtonIcon))
-                        .symbolEffect(.pulse, options: .repeating, isActive: shouldBlinkRecordIcon)
+                        .symbolEffect(.pulse, options: .repeating, isActive: viewModel.isSessionActive)
                         .accessibilityLabel(viewModel.isSessionActive ? "Stop" : "Start")
                 }
             }
             .help(sessionButtonHelp)
 
             Menu {
-                Button {
-                    viewModel.selectedMicrophoneID = ""
-                } label: {
-                    CheckmarkLabel(title: String(localized: "System Default"), isSelected: viewModel.selectedMicrophoneID.isEmpty)
-                }
-                if viewModel.selectedMicrophoneID.isEmpty,
-                   let defaultName = AVCaptureDevice.default(for: .audio)?.localizedName {
-                    Text("  ↳ \(defaultName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Divider()
-                ForEach(viewModel.availableMicrophones, id: \.uniqueID) { device in
-                    Button {
-                        viewModel.selectedMicrophoneID = device.uniqueID
-                    } label: {
-                        CheckmarkLabel(title: device.localizedName, isSelected: viewModel.selectedMicrophoneID == device.uniqueID)
-                    }
-                }
+                MicrophoneMenuContent(viewModel: viewModel)
             } label: {
                 Label("Microphone", systemImage: "mic.fill")
             }
@@ -232,10 +214,6 @@ extension ContentView {
 
     private var isSourceLanguageDownloading: Bool {
         viewModel.downloadingSourceLocaleIdentifiers.contains(viewModel.sourceLocaleIdentifier)
-    }
-
-    private var shouldBlinkRecordIcon: Bool {
-        viewModel.isSessionActive
     }
 
     private var sessionButtonHelp: String {

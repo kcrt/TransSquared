@@ -35,9 +35,7 @@ extension SessionViewModel {
         entries.removeAll()
         rebuildEntryIndexMap()
         cleanupTranslationSlotState()
-        for slot in 0..<translationSlots.count {
-            translationSlots[slot].queue.removeAll()
-        }
+        clearAllTranslationQueues()
         segmentIndex = 0
         accumulatedElapsedTime = 0
 
@@ -158,9 +156,7 @@ extension SessionViewModel {
             audioFileTranscriber = nil
         }
         // Discard pending translations so they don't keep running after cancel.
-        for slot in 0..<translationSlots.count {
-            translationSlots[slot].queue.removeAll()
-        }
+        clearAllTranslationQueues()
         pendingSentenceBuffer = ""
         isTranscribingFile = false
         cleanupFileTranscriptionSource()

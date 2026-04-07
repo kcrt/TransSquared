@@ -65,97 +65,96 @@ struct TranscriptPaneView: View {
         let isHighlighted = highlightedSentenceID != nil && line.sentenceID == highlightedSentenceID
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             if showElapsedTime {
-                if let elapsed = line.elapsedTime {
-                    let showPlayButton = isHighlighted && canPlayback
-                        && hoveredLineID == line.id && line.sentenceID != nil
-                    ZStack {
-                        // Normal timestamp text
-                        Text(formatElapsedTime(elapsed))
-                            .font(.system(size: fontSize * 0.75, design: .monospaced))
-                            .foregroundStyle(isHighlighted ? .secondary : .tertiary)
-                            .opacity(showPlayButton ? 0 : 1)
-
-                        // Play/stop button on hover (only when highlighted and recording exists)
-                        if showPlayButton, let sentenceID = line.sentenceID {
-                            Image(systemName: playingEntryID == sentenceID ? "stop.fill" : "play.fill")
-                                .font(.system(size: fontSize * 0.65))
-                                .foregroundStyle(Color.accentColor)
-                                .accessibilityLabel(playingEntryID == sentenceID ? "Stop" : "Play")
-                        }
-                    }
-                    .frame(minWidth: 40, alignment: .trailing)
-                    .accessibilityElement()
-                    .accessibilityLabel(formatElapsedTime(elapsed))
-                    .accessibilityAddTraits(canPlayback ? .isButton : [])
-                    .onHover { isHovered in
-                        hoveredLineID = isHovered ? line.id : nil
-                    }
-                    .onTapGesture {
-                        if let sentenceID = line.sentenceID {
-                            if isHighlighted && canPlayback {
-                                // Already highlighted + playback available → play/stop
-                                onPlayFromTimestamp?(elapsed, sentenceID)
-                            } else {
-                                // First tap → highlight
-                                onTimestampTapped?(sentenceID)
-                            }
-                        }
-                    }
-                } else {
-                    // Reserve column space for alignment when no timestamp is available.
-                    Text("00:00")
-                        .font(.system(size: fontSize * 0.75, design: .monospaced))
-                        .frame(minWidth: 40, alignment: .trailing)
-                        .hidden()
-                }
+                timestampColumn(line, isHighlighted: isHighlighted)
             }
-
-            if isEditable && editingLineID == line.id {
-                TextField("", text: $editText, axis: .vertical)
-                    .font(.system(size: fontSize))
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(Color.accentColor.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .focused($isEditing)
-                    .onSubmit {
-                        commitEdit(for: line)
-                    }
-                    .onExitCommand {
-                        cancelEdit()
-                    }
-                    .onChange(of: isEditing) { _, focused in
-                        if !focused {
-                            commitEdit(for: line)
-                        }
-                    }
-                    .task {
-                        isEditing = true
-                    }
-            } else if isEditable && !line.isPartial && !line.isSeparator {
-                Text(line.text)
-                    .font(.system(size: fontSize))
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .onTapGesture(count: 2) {
-                        startEditing(line)
-                    }
-            } else {
-                Text(line.text)
-                    .font(.system(size: fontSize))
-                    .foregroundStyle(line.isPartial ? .secondary : .primary)
-                    .italic(line.isPartial)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            lineTextContent(line)
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 1)
         .background(isHighlighted ? Color.accentColor.opacity(0.15) : .clear)
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
+
+    // MARK: - Sub-views
+
+    @ViewBuilder
+    private func timestampColumn(_ line: TranscriptLine, isHighlighted: Bool) -> some View {
+        if let elapsed = line.elapsedTime {
+            let showPlayButton = isHighlighted && canPlayback
+                && hoveredLineID == line.id && line.sentenceID != nil
+            ZStack {
+                Text(elapsed.formattedMMSS)
+                    .font(.system(size: fontSize * 0.75, design: .monospaced))
+                    .foregroundStyle(isHighlighted ? .secondary : .tertiary)
+                    .opacity(showPlayButton ? 0 : 1)
+
+                if showPlayButton, let sentenceID = line.sentenceID {
+                    Image(systemName: playingEntryID == sentenceID ? "stop.fill" : "play.fill")
+                        .font(.system(size: fontSize * 0.65))
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityLabel(playingEntryID == sentenceID ? "Stop" : "Play")
+                }
+            }
+            .frame(minWidth: 40, alignment: .trailing)
+            .accessibilityElement()
+            .accessibilityLabel(elapsed.formattedMMSS)
+            .accessibilityAddTraits(canPlayback ? .isButton : [])
+            .onHover { isHovered in
+                hoveredLineID = isHovered ? line.id : nil
+            }
+            .onTapGesture {
+                guard let sentenceID = line.sentenceID else { return }
+                if isHighlighted && canPlayback {
+                    onPlayFromTimestamp?(elapsed, sentenceID)
+                } else {
+                    onTimestampTapped?(sentenceID)
+                }
+            }
+        } else {
+            Text("00:00")
+                .font(.system(size: fontSize * 0.75, design: .monospaced))
+                .frame(minWidth: 40, alignment: .trailing)
+                .hidden()
+        }
+    }
+
+    @ViewBuilder
+    private func lineTextContent(_ line: TranscriptLine) -> some View {
+        if isEditable && editingLineID == line.id {
+            TextField("", text: $editText, axis: .vertical)
+                .font(.system(size: fontSize))
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(Color.accentColor.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .focused($isEditing)
+                .onSubmit { commitEdit(for: line) }
+                .onExitCommand { cancelEdit() }
+                .onChange(of: isEditing) { _, focused in
+                    if !focused { commitEdit(for: line) }
+                }
+                .task { isEditing = true }
+        } else if isEditable && !line.isPartial && !line.isSeparator {
+            Text(line.text)
+                .font(.system(size: fontSize))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onTapGesture(count: 2) {
+                    startEditing(line)
+                }
+        } else {
+            Text(line.text)
+                .font(.system(size: fontSize))
+                .foregroundStyle(line.isPartial ? .secondary : .primary)
+                .italic(line.isPartial)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    // MARK: - Editing Helpers
 
     private func startEditing(_ line: TranscriptLine) {
         editText = line.text
@@ -175,10 +174,5 @@ struct TranscriptPaneView: View {
     private func cancelEdit() {
         editingLineID = nil
         editText = ""
-    }
-
-    /// Formats elapsed seconds as MM:SS (e.g., "03:45").
-    private func formatElapsedTime(_ seconds: TimeInterval) -> String {
-        seconds.formattedMMSS
     }
 }

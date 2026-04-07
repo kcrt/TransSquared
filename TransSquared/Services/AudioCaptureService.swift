@@ -66,7 +66,10 @@ final class AudioCaptureService {
         logger.debug("Session configuration committed")
 
         // Create the async stream
-        let (stream, continuation) = AsyncStream.makeStream(of: AnalyzerInput.self)
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: AnalyzerInput.self,
+            bufferingPolicy: .bufferingNewest(50)
+        )
         self.inputContinuation = continuation
 
         // Create audio level stream for waveform visualization.

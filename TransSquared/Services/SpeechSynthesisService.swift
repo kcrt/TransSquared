@@ -38,6 +38,10 @@ final class SpeechSynthesisService: NSObject, AVSpeechSynthesizerDelegate {
     /// Stops any ongoing speech synthesis.
     func stop() {
         synthesizer.stopSpeaking(at: .immediate)
+        clearSpeakingState()
+    }
+
+    private func clearSpeakingState() {
         isSpeaking = false
         speakingEntryID = nil
     }
@@ -46,16 +50,14 @@ final class SpeechSynthesisService: NSObject, AVSpeechSynthesizerDelegate {
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor in
-            self.isSpeaking = false
-            self.speakingEntryID = nil
+            self.clearSpeakingState()
             logger.debug("Speech synthesis finished")
         }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         Task { @MainActor in
-            self.isSpeaking = false
-            self.speakingEntryID = nil
+            self.clearSpeakingState()
             logger.debug("Speech synthesis cancelled")
         }
     }

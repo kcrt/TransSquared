@@ -36,7 +36,7 @@ extension SessionViewModel {
             // Cancel any pending partial translation timers
             for slot in 0..<translationSlots.count {
                 translationSlots[slot].partialTranslationTimer?.cancel()
-                translationSlots[slot].partialTranslationTimer = nil
+                translationSlots[slot].partialTranslationTimer = nil // keep other partial state intact
             }
 
             let idx = ensureCurrentEntry()

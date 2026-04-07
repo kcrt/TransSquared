@@ -7,6 +7,15 @@ enum TranscriptionEvent: Sendable {
     case partial(String, duration: TimeInterval?, audioOffset: TimeInterval?)
     case finalized(String, duration: TimeInterval?, audioOffset: TimeInterval?)
     case error(String)
+
+    /// Creates a `TranscriptionEvent` from a `SpeechTranscriber.Result`.
+    static func from(_ result: SpeechTranscriber.Result) -> TranscriptionEvent {
+        let text = String(result.text.characters)
+        let timeInfo = AudioTimeInfo.from(result.text)
+        return result.isFinal
+            ? .finalized(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset)
+            : .partial(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset)
+    }
 }
 
 /// Timing information extracted from a `SpeechTranscriber.Result`'s `TimeRangeAttribute` runs.
@@ -130,15 +139,11 @@ actor TranscriptionManager {
             do {
                 for try await result in capturedTranscriber.results {
                     resultCount += 1
-                    let text = String(result.text.characters)
-                    let timeInfo = await AudioTimeInfo.from(result.text)
+                    let event = TranscriptionEvent.from(result)
                     if result.isFinal {
-                        logger.debug("Final result #\(resultCount): \"\(text, privacy: .private)\" (duration: \(timeInfo.map { String(format: "%.2fs", $0.duration) } ?? "nil"))")
-                        capturedContinuation.yield(.finalized(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))
-                    } else {
-                        // logger.debug("Partial result #\(resultCount): \"\(text, privacy: .private)\"")
-                        capturedContinuation.yield(.partial(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))
+                        logger.debug("Final result #\(resultCount): \"\(String(result.text.characters), privacy: .private)\"")
                     }
+                    capturedContinuation.yield(event)
                 }
                 logger.info("Transcriber results stream ended (total: \(resultCount))")
             } catch {
@@ -217,14 +222,11 @@ actor TranscriptionManager {
         // Clean up
         analyzer = nil
         transcriber = nil
-        eventContinuation?.finish()
-        eventContinuation = nil
-        isRunning = false
+        markStopped()
         logger.info("Transcription stopped")
     }
 
     private func markStopped() {
-        logger.debug("markStopped called")
         eventContinuation?.finish()
         eventContinuation = nil
         isRunning = false

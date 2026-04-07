@@ -51,9 +51,7 @@ extension SessionViewModel {
         entries = []
         rebuildEntryIndexMap()
         cleanupTranslationSlotState()
-        for slot in 0..<translationSlots.count {
-            translationSlots[slot].queue = []
-        }
+        clearAllTranslationQueues()
         accumulatedElapsedTime = 0
         sessionStartDate = nil
         cleanupRecording()
@@ -68,16 +66,19 @@ extension SessionViewModel {
         panel.nameFieldStringValue = defaultAudioFileName()
         panel.begin { [weak self, sourceURL] response in
             guard response == .OK, let destURL = panel.url else { return }
-            do {
-                if FileManager.default.fileExists(atPath: destURL.path) {
-                    try FileManager.default.removeItem(at: destURL)
-                }
-                try FileManager.default.copyItem(at: sourceURL, to: destURL)
-                logger.info("Audio recording exported to \(destURL.path)")
-            } catch {
-                logger.error("Failed to export audio: \(error.localizedDescription)")
-                Task { @MainActor [weak self] in
-                    self?.errorMessage = "Failed to export audio: \(error.localizedDescription)"
+            // Offload file I/O to avoid blocking the main thread for large files.
+            Task.detached {
+                do {
+                    if FileManager.default.fileExists(atPath: destURL.path) {
+                        try FileManager.default.removeItem(at: destURL)
+                    }
+                    try FileManager.default.copyItem(at: sourceURL, to: destURL)
+                    logger.info("Audio recording exported to \(destURL.path)")
+                } catch {
+                    logger.error("Failed to export audio: \(error.localizedDescription)")
+                    await MainActor.run { [weak self] in
+                        self?.errorMessage = "Failed to export audio: \(error.localizedDescription)"
+                    }
                 }
             }
         }
@@ -95,26 +96,21 @@ extension SessionViewModel {
 
     func copyAllTranslation() -> String {
         let slotCount = min(targetCount, translationSlots.count)
-        if slotCount > 1 {
-            var result: [String] = []
-            for slot in 0..<slotCount {
+        var result: [String] = []
+        for slot in 0..<slotCount {
+            if slotCount > 1 {
                 let langId = slot < targetLanguageIdentifiers.count
                     ? targetLanguageIdentifiers[slot].uppercased() : "?"
                 result.append("[\(langId)]")
-                let lines = entries.filter { !$0.isSeparator }
-                    .compactMap { $0.translations[slot] }
-                    .filter { !$0.isPartial }
-                    .map(\.text)
-                result.append(contentsOf: lines)
-                result.append("")
             }
-            return result.joined(separator: "\n")
+            let lines = entries.filter { !$0.isSeparator }
+                .compactMap { $0.translations[slot] }
+                .filter { !$0.isPartial }
+                .map(\.text)
+            result.append(contentsOf: lines)
+            if slotCount > 1 { result.append("") }
         }
-        return entries.filter { !$0.isSeparator }
-            .compactMap { $0.translations[0] }
-            .filter { !$0.isPartial }
-            .map(\.text)
-            .joined(separator: "\n")
+        return result.joined(separator: "\n")
     }
 
     func copyAllInterleaved() -> String {

@@ -29,14 +29,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Dispatch async so the window list has been updated.
         DispatchQueue.main.async {
             let app = NSApplication.shared
-            let hasRegularWindow = app.windows.contains { window in
-                (window.isVisible || window.isMiniaturized) && !(window is NSPanel)
+            let hasRegularWindow = app.windows.contains {
+                ($0.isVisible || $0.isMiniaturized) && !($0 is NSPanel)
             }
-            if !hasRegularWindow {
-                for window in app.windows where window is NSPanel && window.isVisible {
-                    window.orderOut(nil)
-                }
-            }
+            guard !hasRegularWindow else { return }
+            app.windows
+                .filter { $0 is NSPanel && $0.isVisible }
+                .forEach { $0.orderOut(nil) }
         }
     }
 }

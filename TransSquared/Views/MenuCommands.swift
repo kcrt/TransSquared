@@ -265,25 +265,7 @@ struct AppMenuCommands: Commands {
     private var microphoneMenu: some View {
         Menu("Microphone") {
             if let vm = viewModel {
-                Button {
-                    vm.selectedMicrophoneID = ""
-                } label: {
-                    CheckmarkLabel(
-                        title: String(localized: "System Default"),
-                        isSelected: vm.selectedMicrophoneID.isEmpty
-                    )
-                }
-                Divider()
-                ForEach(vm.availableMicrophones, id: \.uniqueID) { device in
-                    Button {
-                        vm.selectedMicrophoneID = device.uniqueID
-                    } label: {
-                        CheckmarkLabel(
-                            title: device.localizedName,
-                            isSelected: vm.selectedMicrophoneID == device.uniqueID
-                        )
-                    }
-                }
+                MicrophoneMenuContent(viewModel: vm)
             }
         }
         .disabled(viewModel?.isSessionActive ?? true)

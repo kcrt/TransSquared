@@ -262,12 +262,7 @@ final class SessionViewModel {
     /// Cumulative elapsed time from the first session start to now,
     /// accounting for time accumulated across previous start/stop cycles.
     var currentElapsedTime: TimeInterval {
-        let currentSegment: TimeInterval
-        if let start = sessionStartDate {
-            currentSegment = Date().timeIntervalSince(start)
-        } else {
-            currentSegment = 0
-        }
+        let currentSegment = sessionStartDate.map { Date().timeIntervalSince($0) } ?? 0
         return accumulatedElapsedTime + currentSegment
     }
 
@@ -333,50 +328,54 @@ final class SessionViewModel {
     func refreshMicrophones() {
         // Create a persistent discovery session if not already set up
         if microphoneDiscoverySession == nil {
-            let session = AVCaptureDevice.DiscoverySession(
-                deviceTypes: [.microphone],
-                mediaType: .audio,
-                position: .unspecified
-            )
-            microphoneDiscoverySession = session
-
-            // Observe device list changes via KVO
-            deviceObservation = session.observe(\.devices, options: [.new]) { [weak self] discoverySession, _ in
-                let devices = discoverySession.devices
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    self.availableMicrophones = devices
-                    logger.info("Microphone list updated: \(devices.count) device(s)")
-
-                    // If the selected device disappeared, reset to default
-                    if !self.selectedMicrophoneID.isEmpty,
-                       !devices.contains(where: { $0.uniqueID == self.selectedMicrophoneID }) {
-                        logger.info("Selected microphone disconnected, resetting to default")
-                        let wasActive = self.isSessionActive
-                        self.selectedMicrophoneID = ""
-
-                        // Stop the active session since the device is gone
-                        if wasActive {
-                            logger.warning("Active microphone disconnected during session, stopping")
-                            await self.stopSession()
-                            self.errorMessage = String(
-                                localized: "Microphone was disconnected. The session has been stopped.",
-                                comment: "Error shown when the active microphone is unplugged during a session"
-                            )
-                        }
-                    }
-                }
-            }
+            setupMicrophoneDiscoverySession()
         }
 
         availableMicrophones = microphoneDiscoverySession?.devices ?? []
         logger.info("Found \(self.availableMicrophones.count) microphone(s)")
 
         // If the selected device disappeared, reset to default
-        if !selectedMicrophoneID.isEmpty,
-           !availableMicrophones.contains(where: { $0.uniqueID == selectedMicrophoneID }) {
-            logger.info("Selected microphone no longer available, resetting to default")
-            selectedMicrophoneID = ""
+        guard !selectedMicrophoneID.isEmpty else { return }
+        guard !availableMicrophones.contains(where: { $0.uniqueID == selectedMicrophoneID }) else { return }
+
+        logger.info("Selected microphone no longer available, resetting to default")
+        selectedMicrophoneID = ""
+    }
+
+    /// Creates the discovery session and sets up KVO observation for device changes.
+    private func setupMicrophoneDiscoverySession() {
+        let session = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.microphone],
+            mediaType: .audio,
+            position: .unspecified
+        )
+        microphoneDiscoverySession = session
+
+        // Observe device list changes via KVO
+        deviceObservation = session.observe(\.devices, options: [.new]) { [weak self] discoverySession, _ in
+            let devices = discoverySession.devices
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.availableMicrophones = devices
+                logger.info("Microphone list updated: \(devices.count) device(s)")
+
+                // If the selected device disappeared, reset to default
+                guard !self.selectedMicrophoneID.isEmpty,
+                      !devices.contains(where: { $0.uniqueID == self.selectedMicrophoneID }) else { return }
+
+                logger.info("Selected microphone disconnected, resetting to default")
+                let wasActive = self.isSessionActive
+                self.selectedMicrophoneID = ""
+
+                // Stop the active session since the device is gone
+                guard wasActive else { return }
+                logger.warning("Active microphone disconnected during session, stopping")
+                await self.stopSession()
+                self.errorMessage = String(
+                    localized: "Microphone was disconnected. The session has been stopped.",
+                    comment: "Error shown when the active microphone is unplugged during a session"
+                )
+            }
         }
     }
 
@@ -445,30 +444,38 @@ final class SessionViewModel {
         let assetStatus = await AssetInventory.status(forModules: [transcriber])
         logger.info("Asset status for \(self.sourceLocaleIdentifier): \(String(describing: assetStatus)), localDownloading: \(isDownloadingLocally)")
 
-        if assetStatus != .installed {
-            if isDownloadingLocally || assetStatus == .downloading {
-                logger.info("Session start aborted: speech assets still downloading for \(self.sourceLocaleIdentifier)")
-                errorMessage = String(
-                    localized: "Speech recognition model is still downloading. Please wait and try again.",
-                    comment: "Error shown when speech model is still downloading at session start"
-                )
-                return
-            } else if assetStatus == .supported {
-                logger.info("Session start aborted: speech assets not installed for \(self.sourceLocaleIdentifier)")
-                errorMessage = String(
-                    localized: "Speech recognition model is not installed. Please select the language again to start the download.",
-                    comment: "Error shown when user tries to start a session without the required speech model"
-                )
-                downloadSpeechAssetsIfNeeded(for: sourceLocale)
-                return
-            } else if assetStatus == .unsupported {
-                logger.info("Session start aborted: speech assets unsupported for \(self.sourceLocaleIdentifier)")
-                errorMessage = String(
-                    localized: "Speech recognition is not supported for this language.",
-                    comment: "Error shown when the selected language is not supported for speech recognition"
-                )
-                return
-            }
+        switch assetStatus {
+        case .installed:
+            break
+        case .downloading:
+            logger.info("Session start aborted: speech assets still downloading for \(self.sourceLocaleIdentifier)")
+            errorMessage = String(
+                localized: "Speech recognition model is still downloading. Please wait and try again.",
+                comment: "Error shown when speech model is still downloading at session start"
+            )
+            return
+        case _ where isDownloadingLocally:
+            logger.info("Session start aborted: speech assets still downloading for \(self.sourceLocaleIdentifier)")
+            errorMessage = String(
+                localized: "Speech recognition model is still downloading. Please wait and try again.",
+                comment: "Error shown when speech model is still downloading at session start"
+            )
+            return
+        case .supported:
+            logger.info("Session start aborted: speech assets not installed for \(self.sourceLocaleIdentifier)")
+            errorMessage = String(
+                localized: "Speech recognition model is not installed. Please select the language again to start the download.",
+                comment: "Error shown when user tries to start a session without the required speech model"
+            )
+            downloadSpeechAssetsIfNeeded(for: sourceLocale)
+            return
+        default:
+            logger.info("Session start aborted: speech assets unsupported for \(self.sourceLocaleIdentifier)")
+            errorMessage = String(
+                localized: "Speech recognition is not supported for this language.",
+                comment: "Error shown when the selected language is not supported for speech recognition"
+            )
+            return
         }
 
         // Verify translation models are installed for all active target languages.
@@ -724,11 +731,14 @@ final class SessionViewModel {
     /// Call this when stopping a session or discarding translation state.
     func cleanupTranslationSlotState() {
         for slot in 0..<translationSlots.count {
-            translationSlots[slot].partialTranslationTimer?.cancel()
-            translationSlots[slot].partialTranslationTimer = nil
-            translationSlots[slot].pendingPartialText = nil
-            translationSlots[slot].pendingPartialElapsedTime = nil
-            translationSlots[slot].partialEntryID = nil
+            translationSlots[slot].resetPartialState()
+        }
+    }
+
+    /// Removes all queued translation items from every slot.
+    func clearAllTranslationQueues() {
+        for slot in 0..<translationSlots.count {
+            translationSlots[slot].queue.removeAll()
         }
     }
 
@@ -806,17 +816,12 @@ final class SessionViewModel {
         self.targetCount = (1...Self.maxTargetCount).contains(storedCount) ? storedCount : 1
 
         if let stored = defaults.array(forKey: "targetLanguageIdentifiers") as? [String], !stored.isEmpty {
-            if stored.count >= Self.maxTargetCount {
-                self.targetLanguageIdentifiers = stored
-            } else {
-                // Pad with defaults to maintain maxTargetCount elements
-                var padded = stored
-                let defaults = Self.initialTargetLanguageIdentifiers
-                while padded.count < Self.maxTargetCount {
-                    padded.append(defaults[padded.count % defaults.count])
-                }
-                self.targetLanguageIdentifiers = padded
+            var identifiers = stored
+            let fallbacks = Self.initialTargetLanguageIdentifiers
+            while identifiers.count < Self.maxTargetCount {
+                identifiers.append(fallbacks[identifiers.count % fallbacks.count])
             }
+            self.targetLanguageIdentifiers = identifiers
         }
     }
 }

@@ -159,10 +159,7 @@ extension SessionViewModel {
 
     private func commitSentenceForSlot(_ slot: Int, entryIndex idx: Int, sentence: String) {
         guard slot < translationSlots.count else { return }
-        translationSlots[slot].partialTranslationTimer?.cancel()
-        translationSlots[slot].partialTranslationTimer = nil
-        translationSlots[slot].pendingPartialText = nil
-        translationSlots[slot].pendingPartialElapsedTime = nil
+        translationSlots[slot].resetPartialState()
 
         let entryID = entries[idx].id
         let elapsed = entries[idx].elapsedTime
@@ -223,14 +220,11 @@ extension SessionViewModel {
             }
         } catch {
             logger.error("Slot \(slot) translation failed: \(error.localizedDescription)")
-            if !isPartial {
-                if let entryIdx = entryIndex(for: entryID) {
-                    let existing = entries[entryIdx].translations[slot]
-                    entries[entryIdx].translations[slot] = TransString(
-                        id: existing?.id ?? UUID(), text: "[Translation failed]", isPartial: false, finalizedAt: Date()
-                    )
-                }
-            }
+            guard !isPartial, let entryIdx = entryIndex(for: entryID) else { return }
+            let existing = entries[entryIdx].translations[slot]
+            entries[entryIdx].translations[slot] = TransString(
+                id: existing?.id ?? UUID(), text: "[Translation failed]", isPartial: false, finalizedAt: Date()
+            )
         }
     }
 

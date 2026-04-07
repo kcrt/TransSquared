@@ -16,6 +16,7 @@ import os
 actor AudioFileTranscriber {
     private nonisolated let logger = Logger.app("FileTranscription")
     private var analyzer: SpeechAnalyzer?
+    private var pipelineTask: Task<Void, Never>?
 
     /// Transcribes the audio file at the given URL and yields `TranscriptionEvent`s.
     ///
@@ -80,20 +81,16 @@ actor AudioFileTranscriber {
             }
         }
 
-        Task { [weak self] in
+        pipelineTask = Task { [weak self] in
             // Consume transcription results concurrently with analysis.
             let resultTask = Task {
                 do {
                     for try await result in transcriber.results {
-                        let text = String(result.text.characters)
-                        let timeInfo = await AudioTimeInfo.from(result.text)
+                        let event = TranscriptionEvent.from(result)
                         if result.isFinal {
-                            capturedLogger.info("Final: \"\(text)\" (duration: \(timeInfo.map { String(format: "%.2fs", $0.duration) } ?? "nil"), offset: \(timeInfo.map { String(format: "%.2fs", $0.offset) } ?? "nil"))")
-                            continuation.yield(.finalized(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))
-                        } else {
-                            capturedLogger.debug("Partial: \"\(text)\"")
-                            continuation.yield(.partial(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))
+                            capturedLogger.info("Final: \"\(String(result.text.characters))\"")
                         }
+                        continuation.yield(event)
                     }
                     capturedLogger.info("Results stream ended")
                 } catch {
@@ -136,6 +133,8 @@ actor AudioFileTranscriber {
 
     /// Cancels any in-progress transcription.
     func cancel() async {
+        pipelineTask?.cancel()
+        pipelineTask = nil
         if let analyzer {
             await analyzer.cancelAndFinishNow()
         }
@@ -144,5 +143,6 @@ actor AudioFileTranscriber {
 
     private func cleanup() {
         analyzer = nil
+        pipelineTask = nil
     }
 }

@@ -40,19 +40,10 @@ struct SubtitleOverlayView: View {
         for line in lines.reversed() {
             if result.count >= Self.maxVisibleLines { break }
             if line.isSeparator { continue }
-            if line.isPartial {
-                result.append(line)
-                continue
-            }
-            guard let finalizedAt = line.finalizedAt else {
-                result.append(line)
-                continue
-            }
-            if now.timeIntervalSince(finalizedAt) < Self.expirationInterval {
-                result.append(line)
-            } else {
-                break
-            }
+
+            let isExpired = line.finalizedAt.map { now.timeIntervalSince($0) >= Self.expirationInterval } ?? false
+            if isExpired { break }
+            result.append(line)
         }
         return result.reversed()
     }

@@ -34,18 +34,34 @@ struct MicrophoneVolumeService {
     /// Whether the target input device supports volume control.
     func isVolumeControlAvailable() -> Bool {
         guard let deviceID = resolveDeviceID() else { return false }
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyVolumeScalar,
-            mScope: kAudioDevicePropertyScopeInput,
-            mElement: kAudioObjectPropertyElementMain
-        )
-        if AudioObjectHasProperty(deviceID, &address) { return true }
-        // Some devices use per-channel volume
-        address.mElement = 1
-        return AudioObjectHasProperty(deviceID, &address)
+        return withFirstAvailableVolumeElement(device: deviceID, scope: kAudioDevicePropertyScopeInput) { address in
+            AudioObjectHasProperty(deviceID, &address)
+        }
     }
 
     // MARK: - Private Helpers
+
+    /// Elements to try when accessing volume properties: main element first, then channel 1.
+    private static let volumeElements: [UInt32] = [kAudioObjectPropertyElementMain, 1]
+
+    /// Iterates over candidate volume elements and returns `true` as soon as `body` succeeds.
+    private func withFirstAvailableVolumeElement(
+        device: AudioDeviceID,
+        scope: AudioObjectPropertyScope,
+        body: (inout AudioObjectPropertyAddress) -> Bool
+    ) -> Bool {
+        for element in Self.volumeElements {
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyVolumeScalar,
+                mScope: scope,
+                mElement: element
+            )
+            if AudioObjectHasProperty(device, &address) && body(&address) {
+                return true
+            }
+        }
+        return false
+    }
 
     /// Resolves the target AudioDeviceID — by UID if specified, otherwise system default.
     private func resolveDeviceID() -> AudioDeviceID? {
@@ -103,24 +119,10 @@ struct MicrophoneVolumeService {
         var volume: Float32 = 0
         var size = UInt32(MemoryLayout<Float32>.size)
 
-        // Try main element first
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyVolumeScalar,
-            mScope: scope,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        if AudioObjectHasProperty(device, &address) {
-            let status = AudioObjectGetPropertyData(device, &address, 0, nil, &size, &volume)
-            if status == noErr { return volume }
+        let found = withFirstAvailableVolumeElement(device: device, scope: scope) { address in
+            AudioObjectGetPropertyData(device, &address, 0, nil, &size, &volume) == noErr
         }
-
-        // Fallback: try channel 1
-        address.mElement = 1
-        if AudioObjectHasProperty(device, &address) {
-            let status = AudioObjectGetPropertyData(device, &address, 0, nil, &size, &volume)
-            if status == noErr { return volume }
-        }
+        if found { return volume }
 
         logger.debug("Volume property not available for device \(device)")
         return nil
@@ -130,23 +132,10 @@ struct MicrophoneVolumeService {
         var vol = volume
         let size = UInt32(MemoryLayout<Float32>.size)
 
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyVolumeScalar,
-            mScope: scope,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        if AudioObjectHasProperty(device, &address) {
-            let status = AudioObjectSetPropertyData(device, &address, 0, nil, size, &vol)
-            if status == noErr { return true }
+        let found = withFirstAvailableVolumeElement(device: device, scope: scope) { address in
+            AudioObjectSetPropertyData(device, &address, 0, nil, size, &vol) == noErr
         }
-
-        // Fallback: try channel 1
-        address.mElement = 1
-        if AudioObjectHasProperty(device, &address) {
-            let status = AudioObjectSetPropertyData(device, &address, 0, nil, size, &vol)
-            if status == noErr { return true }
-        }
+        if found { return true }
 
         logger.warning("Failed to set input volume for device \(device)")
         return false

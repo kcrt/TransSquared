@@ -98,6 +98,41 @@ struct TargetLanguageMenuContent: View {
     }
 }
 
+// MARK: - Shared Microphone Menu Content
+
+/// Shared microphone selection menu items used by both the toolbar and menu bar.
+struct MicrophoneMenuContent: View {
+    var viewModel: SessionViewModel
+
+    var body: some View {
+        Button {
+            viewModel.selectedMicrophoneID = ""
+        } label: {
+            CheckmarkLabel(
+                title: String(localized: "System Default"),
+                isSelected: viewModel.selectedMicrophoneID.isEmpty
+            )
+        }
+        if viewModel.selectedMicrophoneID.isEmpty,
+           let defaultName = AVCaptureDevice.default(for: .audio)?.localizedName {
+            Text("  ↳ \(defaultName)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        Divider()
+        ForEach(viewModel.availableMicrophones, id: \.uniqueID) { device in
+            Button {
+                viewModel.selectedMicrophoneID = device.uniqueID
+            } label: {
+                CheckmarkLabel(
+                    title: device.localizedName,
+                    isSelected: viewModel.selectedMicrophoneID == device.uniqueID
+                )
+            }
+        }
+    }
+}
+
 // MARK: - Checkmark Menu Item Label
 
 /// A menu button label that shows a checkmark when selected, a cloud icon when not downloaded,
@@ -204,9 +239,7 @@ struct FileTranscriptionProgressView: View {
         return base + " — \(pct)% (\(completed)/\(total))"
     }
 
-    private func formatTime(_ seconds: TimeInterval) -> String {
-        seconds.formattedMSS
-    }
+    private func formatTime(_ seconds: TimeInterval) -> String { seconds.formattedMSS }
 }
 
 // MARK: - Pasteboard Helper
