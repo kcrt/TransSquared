@@ -13,9 +13,9 @@ final class SubtitleWindowController {
     private var keyMonitor: Any?
 
     /// Called when the user wants to exit subtitle mode (e.g. via ⌘D while overlay is shown).
-    var onDismiss: (() -> Void)?
+    var onDismiss: (@MainActor () -> Void)?
 
-    nonisolated deinit {
+    deinit {
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
         }
