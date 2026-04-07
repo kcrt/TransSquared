@@ -29,12 +29,16 @@ struct SubtitleOverlayView: View {
     /// Duration in seconds before a finalized subtitle line disappears.
     private static let expirationInterval: TimeInterval = 30
 
+    /// Maximum number of subtitle lines shown at once.
+    private static let maxVisibleLines = 5
+
     private var visibleLines: [TranscriptLine] {
         // Scan from the end — lines are chronological, so once we hit an expired
         // finalized line all earlier lines are also expired. This is O(k) where k
         // is the number of visible lines, not O(n) for the entire history.
         var result: [TranscriptLine] = []
         for line in lines.reversed() {
+            if result.count >= Self.maxVisibleLines { break }
             if line.isSeparator { continue }
             if line.isPartial {
                 result.append(line)
