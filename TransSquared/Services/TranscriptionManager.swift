@@ -136,7 +136,7 @@ actor TranscriptionManager {
                         logger.debug("Final result #\(resultCount): \"\(text, privacy: .private)\" (duration: \(timeInfo.map { String(format: "%.2fs", $0.duration) } ?? "nil"))")
                         capturedContinuation.yield(.finalized(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))
                     } else {
-                        logger.debug("Partial result #\(resultCount): \"\(text, privacy: .private)\"")
+                        // logger.debug("Partial result #\(resultCount): \"\(text, privacy: .private)\"")
                         capturedContinuation.yield(.partial(text, duration: timeInfo?.duration, audioOffset: timeInfo?.offset))
                     }
                 }

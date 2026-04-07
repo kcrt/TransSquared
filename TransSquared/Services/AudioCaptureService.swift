@@ -53,17 +53,20 @@ final class AudioCaptureService {
         }
         session.addOutput(audioOutput)
 
-        // Request Float32 non-interleaved output regardless of device native
-        // format. Some devices (e.g. Razer Seiren Mini) deliver Int16, which
-        // causes copyPCMData failures with AVAudioPCMBuffer. Letting the
-        // system handle the conversion ensures consistent sample buffers.
+        // Request Float32 output regardless of device native format. Some
+        // devices (e.g. Razer Seiren Mini) deliver Int16, which causes
+        // copyPCMData failures with AVAudioPCMBuffer.
+        // NOTE: Do NOT force non-interleaved here — virtual audio drivers
+        // (e.g. BlackHole) trigger a Fig assert in AVCaptureAudioDataOutput's
+        // internal AudioUnit graph when non-interleaved is requested, causing
+        // silent/corrupted audio. Let the system choose interleaving and let
+        // AVAudioConverter handle the conversion in AudioCaptureDelegate.
         audioOutput.audioSettings = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
             AVLinearPCMBitDepthKey: 32,
             AVLinearPCMIsFloatKey: true,
-            AVLinearPCMIsNonInterleaved: true,
         ]
-        logger.debug("Added audio data output to session (Float32 non-interleaved)")
+        logger.debug("Added audio data output to session (Float32)")
 
         session.commitConfiguration()
         logger.debug("Session configuration committed")

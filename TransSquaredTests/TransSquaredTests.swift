@@ -655,6 +655,8 @@ struct LanguageSwapTests {
         vm.swapLanguages()
         // No candidates found, swap should be no-op
         #expect(vm.sourceLocaleIdentifier == oldSource)
+        // Should show an error message to the user
+        #expect(vm.errorMessage != nil)
     }
 
     @Test func swapWithMatchingLocalesSwapsCorrectly() {

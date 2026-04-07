@@ -49,7 +49,7 @@ struct TranscriptPaneView: View {
                     .padding(8)
                 }
                 .scrollIndicators(.hidden)
-                .onChange(of: lines.count) {
+                .onChange(of: lines.last?.text) {
                     if let lastLine = lines.last {
                         withAnimation(.easeOut(duration: 0.2)) {
                             proxy.scrollTo(lastLine.id, anchor: .bottom)

@@ -11,7 +11,7 @@ extension SessionViewModel {
         switch event {
         case .partial(let rawText, let duration, let audioOffset):
             let text = applyAutoReplacements(rawText)
-            logger.debug("Event: partial \"\(rawText, privacy: .private)\" → \"\(text, privacy: .private)\"")
+            // logger.debug("Event: partial \"\(rawText, privacy: .private)\" → \"\(text, privacy: .private)\"")
 
             let idx = ensureCurrentEntry()
             entries[idx].pendingPartial = text

@@ -110,6 +110,11 @@ extension SessionViewModel {
             }
         } else {
             logger.warning("swapLanguages: no matching source locale found for targetLangCode=\(targetLangCode?.identifier ?? "nil")")
+            let langName = Locale.current.localizedString(forIdentifier: oldTargetIdentifier) ?? oldTargetIdentifier
+            errorMessage = String(
+                localized: "Cannot swap: \(langName) is not available as a speech recognition source language.",
+                comment: "Error shown when the user tries to swap languages but the target language is not supported for speech recognition input"
+            )
         }
 
         logger.debug("swapLanguages: result source='\(self.sourceLocaleIdentifier)', target='\(self.targetLanguageIdentifier)'")
@@ -156,7 +161,13 @@ extension SessionViewModel {
                 targetLanguageIdentifier = match.minimalIdentifier
             } else if let first = available.first {
                 logger.debug("updateTargetLanguages: no candidate match, defaulting to '\(first.minimalIdentifier)'")
+                let requestedName = Locale.current.localizedString(forIdentifier: targetLanguageIdentifier) ?? targetLanguageIdentifier
+                let fallbackName = Locale.current.localizedString(forIdentifier: first.minimalIdentifier) ?? first.minimalIdentifier
                 targetLanguageIdentifier = first.minimalIdentifier
+                errorMessage = String(
+                    localized: "\(requestedName) is not available as a translation target. Changed to \(fallbackName).",
+                    comment: "Error shown when the desired translation target language is unavailable and was automatically changed to a fallback"
+                )
             }
         }
 
