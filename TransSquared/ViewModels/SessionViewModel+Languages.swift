@@ -56,13 +56,14 @@ extension SessionViewModel {
     func prepareTranslationModelIfNeeded(for languageIdentifier: String) {
         guard targetLanguageDownloadStatus[languageIdentifier] != true else { return }
 
-        let targetLang = Locale.Language(identifier: languageIdentifier)
-        let source = sourceLocale.language
         logger.info("Requesting translation model preparation for '\(languageIdentifier)' (source: \(self.sourceLocaleIdentifier))")
+
+        // Find the slot index for this language to use the shared config builder.
+        let slotIndex = targetLanguageIdentifiers.firstIndex(of: languageIdentifier) ?? 0
 
         // Clear then set config so SwiftUI detects a nil→non-nil transition.
         translationPreparationConfig = nil
-        translationPreparationConfig = TranslationSession.Configuration(source: source, target: targetLang)
+        translationPreparationConfig = translationConfig(forSlot: slotIndex)
     }
 
     func swapLanguages() {
@@ -125,16 +126,28 @@ extension SessionViewModel {
 
         let availability = LanguageAvailability()
         let allLangs = await availability.supportedLanguages
-        var available: [Locale.Language] = []
-        var statusMap: [String: Bool] = [:]
-        for lang in allLangs {
-            if lang.languageCode != sourceLocale.language.languageCode {
-                let status = await availability.status(from: sourceLocale.language, to: lang)
-                if status != .unsupported {
-                    available.append(lang)
-                    statusMap[lang.minimalIdentifier] = (status == .installed)
+        let sourceLangCode = sourceLocale.language.languageCode
+        let sourceLang = sourceLocale.language
+
+        // Check translation status concurrently for all candidate languages.
+        let results = await withTaskGroup(of: (Locale.Language, LanguageAvailability.Status)?.self) { group in
+            for lang in allLangs where lang.languageCode != sourceLangCode {
+                group.addTask {
+                    let status = await availability.status(from: sourceLang, to: lang)
+                    return status != .unsupported ? (lang, status) : nil
                 }
             }
+            var collected: [(Locale.Language, LanguageAvailability.Status)] = []
+            for await result in group {
+                if let result { collected.append(result) }
+            }
+            return collected
+        }
+        var available: [Locale.Language] = []
+        var statusMap: [String: Bool] = [:]
+        for (lang, status) in results {
+            available.append(lang)
+            statusMap[lang.minimalIdentifier] = (status == .installed)
         }
         // Sort by localized display name for a user-friendly order
         available.sort { lhs, rhs in

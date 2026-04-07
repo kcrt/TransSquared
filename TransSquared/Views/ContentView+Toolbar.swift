@@ -1,8 +1,5 @@
 import SwiftUI
 import AVFoundation
-import os
-
-private let logger = Logger.app("ContentView")
 
 // MARK: - Toolbar
 
@@ -261,8 +258,4 @@ extension ContentView {
         return String(localized: "Subtitle Mode (⌘D)")
     }
 
-    func displayName(for language: Locale.Language) -> String {
-        let identifier = language.minimalIdentifier
-        return Locale.current.localizedString(forIdentifier: identifier) ?? identifier
-    }
 }

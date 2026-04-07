@@ -294,15 +294,17 @@ final class SessionViewModel {
         entryIndexMap[entryID]
     }
 
+    /// Builds a `TranslationSession.Configuration` for the given target slot.
+    func translationConfig(forSlot slot: Int) -> TranslationSession.Configuration {
+        let targetLang = Locale.Language(identifier: targetLanguageIdentifiers[slot])
+        return TranslationSession.Configuration(source: sourceLocale.language, target: targetLang)
+    }
+
     /// Creates fresh translation slots for the current target language configuration.
     func makeTranslationSlots() -> [TranslationSlot] {
         (0..<targetCount).map { i in
             var slot = TranslationSlot()
-            let targetLang = Locale.Language(identifier: targetLanguageIdentifiers[i])
-            slot.config = TranslationSession.Configuration(
-                source: sourceLocale.language,
-                target: targetLang
-            )
+            slot.config = translationConfig(forSlot: i)
             return slot
         }
     }
@@ -409,15 +411,20 @@ final class SessionViewModel {
     /// Checks which locales have the timeIndexedProgressiveTranscription model
     /// actually installed on-device via AssetInventory.
     private func checkInstalledLocales(_ locales: [Locale]) async -> Set<String> {
-        var installed: Set<String> = []
-        for locale in locales {
-            let transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
-            let status = await AssetInventory.status(forModules: [transcriber])
-            if status == .installed {
-                installed.insert(locale.identifier)
+        await withTaskGroup(of: String?.self) { group in
+            for locale in locales {
+                group.addTask {
+                    let transcriber = SpeechTranscriber(locale: locale, preset: .timeIndexedProgressiveTranscription)
+                    let status = await AssetInventory.status(forModules: [transcriber])
+                    return status == .installed ? locale.identifier : nil
+                }
             }
+            var installed: Set<String> = []
+            for await id in group {
+                if let id { installed.insert(id) }
+            }
+            return installed
         }
-        return installed
     }
 
     // MARK: - Session Control
@@ -447,14 +454,7 @@ final class SessionViewModel {
         switch assetStatus {
         case .installed:
             break
-        case .downloading:
-            logger.info("Session start aborted: speech assets still downloading for \(self.sourceLocaleIdentifier)")
-            errorMessage = String(
-                localized: "Speech recognition model is still downloading. Please wait and try again.",
-                comment: "Error shown when speech model is still downloading at session start"
-            )
-            return
-        case _ where isDownloadingLocally:
+        case .downloading, _ where isDownloadingLocally:
             logger.info("Session start aborted: speech assets still downloading for \(self.sourceLocaleIdentifier)")
             errorMessage = String(
                 localized: "Speech recognition model is still downloading. Please wait and try again.",
@@ -702,7 +702,9 @@ final class SessionViewModel {
         if playbackService?.playingEntryID == entryID && playbackService?.isPlaying == true {
             playbackService?.stop()
         } else {
-            playbackService?.play(from: audioTime, duration: duration, entryID: entryID)
+            Task {
+                await playbackService?.play(from: audioTime, duration: duration, entryID: entryID)
+            }
         }
     }
 
@@ -725,6 +727,17 @@ final class SessionViewModel {
 
         let language = targetLanguageIdentifiers[slot]
         speechSynthesisService.speak(text: translation.text, language: language, entryID: entryID)
+    }
+
+    /// Resets all transcript state: entries, translation slots, segment index, and elapsed time.
+    /// Shared by `clearHistory()` and `confirmFileTranscription()`.
+    func resetTranscriptState() {
+        entries.removeAll()
+        rebuildEntryIndexMap()
+        cleanupTranslationSlotState()
+        clearAllTranslationQueues()
+        segmentIndex = 0
+        accumulatedElapsedTime = 0
     }
 
     /// Cancels partial translation timers and clears transient slot state.

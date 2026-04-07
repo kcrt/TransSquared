@@ -48,31 +48,9 @@ struct AppMenuCommands: Commands {
 
             Divider()
 
-            Menu("Save Subtitle (.srt)") {
-                Button("Original...") {
-                    viewModel?.exportSubtitle(format: .srt, contentType: .original)
-                }
-                Button("Translation...") {
-                    viewModel?.exportSubtitle(format: .srt, contentType: .translation)
-                }
-                Button("Both...") {
-                    viewModel?.exportSubtitle(format: .srt, contentType: .both)
-                }
+            if let vm = viewModel {
+                SubtitleExportMenuItems(viewModel: vm)
             }
-            .disabled(viewModel?.hasTranscriptContent != true)
-
-            Menu("Save Subtitle (.vtt)") {
-                Button("Original...") {
-                    viewModel?.exportSubtitle(format: .vtt, contentType: .original)
-                }
-                Button("Translation...") {
-                    viewModel?.exportSubtitle(format: .vtt, contentType: .translation)
-                }
-                Button("Both...") {
-                    viewModel?.exportSubtitle(format: .vtt, contentType: .both)
-                }
-            }
-            .disabled(viewModel?.hasTranscriptContent != true)
 
             Divider()
 

@@ -48,11 +48,7 @@ extension SessionViewModel {
     // MARK: - Copy / Export Helpers
 
     func clearHistory() {
-        entries = []
-        rebuildEntryIndexMap()
-        cleanupTranslationSlotState()
-        clearAllTranslationQueues()
-        accumulatedElapsedTime = 0
+        resetTranscriptState()
         sessionStartDate = nil
         cleanupRecording()
     }

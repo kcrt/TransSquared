@@ -1,6 +1,5 @@
 import Speech
 import AVFoundation
-import CoreMedia
 import os
 
 /// Transcribes an audio file using the Speech framework's SpeechTranscriber.
@@ -44,21 +43,12 @@ actor AudioFileTranscriber {
         )
 
         // Ensure speech assets are installed
-        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
-            logger.info("Installing speech assets...")
-            try await request.downloadAndInstall()
-            logger.info("Speech assets installed")
-        }
+        try await SpeechAnalyzer.ensureAssetsInstalled(for: [transcriber])
 
         let newAnalyzer = SpeechAnalyzer(modules: [transcriber])
         self.analyzer = newAnalyzer
 
-        if !contextualStrings.isEmpty {
-            let context = AnalysisContext()
-            context.contextualStrings[.general] = contextualStrings
-            try await newAnalyzer.setContext(context)
-            logger.info("Set \(contextualStrings.count) contextual string(s)")
-        }
+        try await newAnalyzer.setContextualStrings(contextualStrings)
 
         // Report transcription progress via volatile range changes.
         if let onProgress {

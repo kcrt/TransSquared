@@ -23,20 +23,18 @@ final class AudioPlaybackService {
 
     /// Seeks to the given time and starts playing.
     /// If `duration` is provided, playback automatically stops after that many seconds.
-    func play(from time: TimeInterval, duration: TimeInterval?, entryID: UUID) {
+    func play(from time: TimeInterval, duration: TimeInterval?, entryID: UUID) async {
         guard let player else { return }
         removeBoundaryObserver()
         let cmTime = CMTime(seconds: max(0, time), preferredTimescale: 600)
-        Task {
-            await player.seek(to: cmTime)
-            player.play()
-            isPlaying = true
-            playingEntryID = entryID
-            logger.debug("Playing from \(String(format: "%.1f", time))s duration=\(duration.map { String(format: "%.1f", $0) } ?? "nil") (entry: \(entryID))")
+        await player.seek(to: cmTime)
+        player.play()
+        isPlaying = true
+        playingEntryID = entryID
+        logger.debug("Playing from \(String(format: "%.1f", time))s duration=\(duration.map { String(format: "%.1f", $0) } ?? "nil") (entry: \(entryID))")
 
-            if let duration {
-                scheduleBoundaryStop(at: max(0, time) + duration)
-            }
+        if let duration {
+            scheduleBoundaryStop(at: max(0, time) + duration)
         }
     }
 

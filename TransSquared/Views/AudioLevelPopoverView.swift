@@ -54,67 +54,59 @@ struct AudioLevelPopoverView: View {
             dbAxis
                 .frame(width: 44)
 
-            ZStack(alignment: .leading) {
+            Canvas { context, size in
                 // Background grid lines
-                Canvas { context, size in
-                    for tick in Self.dbTicks {
-                        let y = size.height * (1.0 - tick.normalized)
-                        var path = Path()
-                        path.move(to: CGPoint(x: 0, y: y))
-                        path.addLine(to: CGPoint(x: size.width, y: y))
-                        context.stroke(
-                            path,
-                            with: .color(.secondary.opacity(0.15)),
-                            lineWidth: 0.5
-                        )
-                    }
+                for tick in Self.dbTicks {
+                    let y = size.height * (1.0 - tick.normalized)
+                    var gridPath = Path()
+                    gridPath.move(to: CGPoint(x: 0, y: y))
+                    gridPath.addLine(to: CGPoint(x: size.width, y: y))
+                    context.stroke(gridPath, with: .color(.secondary.opacity(0.15)), lineWidth: 0.5)
                 }
 
                 // Level bars
-                Canvas { context, size in
-                    let barCount = audioLevels.count
-                    guard barCount > 0 else { return }
+                let barCount = audioLevels.count
+                if barCount > 0 {
                     let barSpacing: CGFloat = 2
                     let totalSpacing = CGFloat(barCount - 1) * barSpacing
                     let barWidth = max(1, (size.width - totalSpacing) / CGFloat(barCount))
+                    let barOpacity = isActive ? 1.0 : 0.3
 
                     for (index, level) in audioLevels.enumerated() {
                         let x = CGFloat(index) * (barWidth + barSpacing)
                         let barHeight = max(1, CGFloat(level) * size.height)
                         let y = size.height - barHeight
                         let rect = CGRect(x: x, y: y, width: barWidth, height: barHeight)
+                        context.opacity = barOpacity
                         context.fill(
                             Path(roundedRect: rect, cornerRadius: 1),
                             with: .color(AudioWaveformView.levelColor(level, isActive: isActive))
                         )
                     }
+                    context.opacity = 1.0
                 }
-                .opacity(isActive ? 1.0 : 0.3)
-                .animation(.easeOut(duration: 0.08), value: audioLevels)
 
                 // Silence threshold dashed line
-                Canvas { context, size in
-                    let thresholdY = size.height * (1.0 - CGFloat(silenceThreshold))
-                    var linePath = Path()
-                    linePath.move(to: CGPoint(x: 0, y: thresholdY))
-                    linePath.addLine(to: CGPoint(x: size.width, y: thresholdY))
-                    context.stroke(
-                        linePath,
-                        with: .color(.orange.opacity(0.8)),
-                        style: StrokeStyle(lineWidth: 1, dash: [4, 3])
-                    )
+                let thresholdY = size.height * (1.0 - CGFloat(silenceThreshold))
+                var linePath = Path()
+                linePath.move(to: CGPoint(x: 0, y: thresholdY))
+                linePath.addLine(to: CGPoint(x: size.width, y: thresholdY))
+                context.stroke(
+                    linePath,
+                    with: .color(.orange.opacity(0.8)),
+                    style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                )
 
-                    // Label
-                    let label = Text("Silence Threshold")
-                        .font(.system(size: 9))
-                        .foregroundColor(.orange)
-                    context.draw(
-                        context.resolve(label),
-                        at: CGPoint(x: size.width - 2, y: thresholdY - 8),
-                        anchor: .trailing
-                    )
-                }
+                let label = Text("Silence Threshold")
+                    .font(.system(size: 9))
+                    .foregroundColor(.orange)
+                context.draw(
+                    context.resolve(label),
+                    at: CGPoint(x: size.width - 2, y: thresholdY - 8),
+                    anchor: .trailing
+                )
             }
+            .animation(.easeOut(duration: 0.08), value: audioLevels)
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
             .clipShape(RoundedRectangle(cornerRadius: 4))
             .accessibilityElement()

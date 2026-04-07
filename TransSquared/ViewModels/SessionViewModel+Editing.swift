@@ -55,11 +55,7 @@ extension SessionViewModel {
 
         // Ensure translation session is available
         if translationSlots[slot].config == nil, slot < targetLanguageIdentifiers.count {
-            let targetLang = Locale.Language(identifier: targetLanguageIdentifiers[slot])
-            translationSlots[slot].config = TranslationSession.Configuration(
-                source: sourceLocale.language,
-                target: targetLang
-            )
+            translationSlots[slot].config = translationConfig(forSlot: slot)
         }
 
         // Enqueue the re-translation

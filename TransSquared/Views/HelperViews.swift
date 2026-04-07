@@ -2,6 +2,30 @@ import SwiftUI
 import AVFoundation
 import UniformTypeIdentifiers
 
+// MARK: - Subtitle Export Menu Items (shared between toolbar, context menu, and menu bar)
+
+/// Reusable subtitle export menu items for .srt and .vtt formats.
+struct SubtitleExportMenuItems: View {
+    let viewModel: SessionViewModel
+
+    var body: some View {
+        Menu("Subtitle (.srt)") {
+            ForEach(subtitleContentTypes, id: \.label) { item in
+                Button(item.label) { viewModel.exportSubtitle(format: .srt, contentType: item.type) }
+            }
+        }
+        Menu("Subtitle (.vtt)") {
+            ForEach(subtitleContentTypes, id: \.label) { item in
+                Button(item.label) { viewModel.exportSubtitle(format: .vtt, contentType: item.type) }
+            }
+        }
+    }
+
+    private var subtitleContentTypes: [(label: String, type: SessionViewModel.SaveContentType)] {
+        [("Original", .original), ("Translation", .translation), ("Both", .both)]
+    }
+}
+
 // MARK: - Save Transcript Menu Items (shared between context menu and toolbar)
 
 /// Reusable menu content for save transcript actions.
@@ -19,28 +43,7 @@ struct SaveTranscriptMenuItems: View {
             viewModel.saveTranscript(contentType: .both)
         }
         Divider()
-        Menu("Subtitle (.srt)") {
-            Button("Original") {
-                viewModel.exportSubtitle(format: .srt, contentType: .original)
-            }
-            Button("Translation") {
-                viewModel.exportSubtitle(format: .srt, contentType: .translation)
-            }
-            Button("Both") {
-                viewModel.exportSubtitle(format: .srt, contentType: .both)
-            }
-        }
-        Menu("Subtitle (.vtt)") {
-            Button("Original") {
-                viewModel.exportSubtitle(format: .vtt, contentType: .original)
-            }
-            Button("Translation") {
-                viewModel.exportSubtitle(format: .vtt, contentType: .translation)
-            }
-            Button("Both") {
-                viewModel.exportSubtitle(format: .vtt, contentType: .both)
-            }
-        }
+        SubtitleExportMenuItems(viewModel: viewModel)
         if viewModel.hasRecording {
             Divider()
             Button("Audio Recording (.m4a)") {
@@ -219,8 +222,8 @@ struct FileTranscriptionProgressView: View {
         guard duration > 0 else {
             return String(localized: "Transcription")
         }
-        let elapsed = formatTime(progress * duration)
-        let total = formatTime(duration)
+        let elapsed = (progress * duration).formattedMSS
+        let total = duration.formattedMSS
         return String(localized: "Transcription") + " — \(pct)% (\(elapsed) / \(total))"
     }
 
@@ -239,7 +242,6 @@ struct FileTranscriptionProgressView: View {
         return base + " — \(pct)% (\(completed)/\(total))"
     }
 
-    private func formatTime(_ seconds: TimeInterval) -> String { seconds.formattedMSS }
 }
 
 // MARK: - Pasteboard Helper

@@ -16,32 +16,16 @@ final class AudioLevelMonitor {
     /// Ordered audio level samples for waveform visualization (oldest → newest, 0.0–1.0).
     private(set) var levels = Array(repeating: Float(0), count: sampleCount)
 
-    @ObservationIgnored private var ringBuffer = Array(repeating: Float(0), count: sampleCount)
-    @ObservationIgnored private var writeIndex = 0
-
-    /// Writes a new level into the ring buffer and rebuilds the cached ordered array.
+    /// Appends a new level sample, keeping only the most recent `sampleCount` values.
     func append(_ level: Float) {
-        ringBuffer[writeIndex % Self.sampleCount] = level
-        writeIndex += 1
-        let n = Self.sampleCount
-        let start = writeIndex % n
-        if start == 0 {
-            levels = ringBuffer
-        } else {
-            // Single allocation instead of two slices + concatenation.
-            levels = Array(unsafeUninitializedCapacity: n) { buffer, count in
-                let tail = n - start
-                for i in 0..<tail { buffer[i] = ringBuffer[start + i] }
-                for i in 0..<start { buffer[tail + i] = ringBuffer[i] }
-                count = n
-            }
+        levels.append(level)
+        if levels.count > Self.sampleCount {
+            levels.removeFirst()
         }
     }
 
     /// Resets all levels to zero.
     func reset() {
         levels = Array(repeating: 0, count: Self.sampleCount)
-        ringBuffer = Array(repeating: 0, count: Self.sampleCount)
-        writeIndex = 0
     }
 }

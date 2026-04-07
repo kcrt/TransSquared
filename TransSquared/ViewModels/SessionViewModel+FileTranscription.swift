@@ -31,14 +31,7 @@ extension SessionViewModel {
         guard let url = pendingFileTranscriptionURL else { return }
         pendingFileTranscriptionURL = nil
 
-        // Clear existing transcript data
-        entries.removeAll()
-        rebuildEntryIndexMap()
-        cleanupTranslationSlotState()
-        clearAllTranslationQueues()
-        segmentIndex = 0
-        accumulatedElapsedTime = 0
-
+        resetTranscriptState()
         transcribeAudioFile(url: url)
     }
 
@@ -51,8 +44,6 @@ extension SessionViewModel {
         fileAudioDuration = 0
 
         pendingSentenceBuffer = ""
-        segmentIndex = 0
-        accumulatedElapsedTime = 0
         sessionStartDate = Date()
 
         // Clean up any previous playback state.

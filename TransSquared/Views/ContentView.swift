@@ -112,7 +112,6 @@ struct ContentView: View {
                 ? String(localized: "Translation will appear here")
                 : langId
         )
-        let capturedSlot = slot
         TranscriptPaneView(
             lines: lines,
             fontSize: viewModel.fontSize,
@@ -120,14 +119,14 @@ struct ContentView: View {
             showElapsedTime: true,
             isEditable: viewModel.displayMode == .normal,
             onLineEdited: { id, newText in
-                viewModel.editTranslationLine(slot: capturedSlot, id: id, newText: newText)
+                viewModel.editTranslationLine(slot: slot, id: id, newText: newText)
             },
             onTimestampTapped: toggleHighlight,
             highlightedSentenceID: viewModel.highlightedSentenceID,
             canPlayback: true,
             playingEntryID: viewModel.speechSynthesisService.speakingEntryID,
             onPlayFromTimestamp: { _, entryID in
-                viewModel.speakTranslation(entryID: entryID, slot: capturedSlot)
+                viewModel.speakTranslation(entryID: entryID, slot: slot)
             }
         )
     }
@@ -283,17 +282,15 @@ private struct SheetsAndAlerts: ViewModifier {
             }
             .alert(
                 viewModel.permissionIssue?.title ?? "",
-                isPresented: showPermissionBinding
-            ) {
+                isPresented: $viewModel.permissionIssue.isNotNil(),
+                presenting: viewModel.permissionIssue
+            ) { _ in
                 Button("Open System Settings") {
                     viewModel.openSystemSettings()
-                    viewModel.permissionIssue = nil
                 }
-                Button("Cancel", role: .cancel) {
-                    viewModel.permissionIssue = nil
-                }
-            } message: {
-                Text(viewModel.permissionIssue?.message ?? "")
+                Button("Cancel", role: .cancel) {}
+            } message: { issue in
+                Text(issue.message)
             }
     }
 
@@ -303,11 +300,15 @@ private struct SheetsAndAlerts: ViewModifier {
             set: { if !$0 { viewModel.errorMessage = nil } }
         )
     }
+}
 
-    private var showPermissionBinding: Binding<Bool> {
-        Binding(
-            get: { viewModel.permissionIssue != nil },
-            set: { if !$0 { viewModel.permissionIssue = nil } }
+private extension Binding {
+    /// Creates a `Binding<Bool>` that is `true` when the wrapped optional is non-nil.
+    /// Setting it to `false` sets the wrapped value to `nil`.
+    func isNotNil<T>() -> Binding<Bool> where Value == T? {
+        Binding<Bool>(
+            get: { wrappedValue != nil },
+            set: { if !$0 { wrappedValue = nil } }
         )
     }
 }

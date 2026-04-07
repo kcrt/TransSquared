@@ -1,16 +1,11 @@
 import Foundation
 
 /// Describes a missing permission that the user needs to grant in System Settings.
-enum PermissionIssue: Identifiable {
+enum PermissionIssue: String, Identifiable {
     case microphone
     case speechRecognition
 
-    var id: String {
-        switch self {
-        case .microphone: return "microphone"
-        case .speechRecognition: return "speechRecognition"
-        }
-    }
+    var id: String { rawValue }
 
     var title: String {
         switch self {
