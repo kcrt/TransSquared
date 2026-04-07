@@ -9,6 +9,9 @@ private let logger = Logger.app("MenuCommands")
 
 struct AppMenuCommands: Commands {
     @FocusedValue(SessionViewModel.self) private var viewModel
+    #if DEBUG
+    @MainActor static let debugWindowController = DebugWindowController()
+    #endif
 
     var body: some Commands {
         // App menu: Settings
@@ -166,6 +169,15 @@ struct AppMenuCommands: Commands {
 
         #if DEBUG
         CommandMenu("DEBUG") {
+            Button("Debug Inspector") {
+                if let vm = viewModel {
+                    AppMenuCommands.debugWindowController.toggle(viewModel: vm)
+                }
+            }
+            .disabled(viewModel == nil)
+
+            Divider()
+
             Button("Release All Speech Models (except ja/en)") {
                 Task {
                     let keepLanguageCodes: Set<String> = ["ja", "en"]

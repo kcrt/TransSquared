@@ -54,10 +54,8 @@ struct SubtitleOverlayView: View {
             if !visibleLines.isEmpty {
                 VStack(spacing: 2) {
                     ForEach(visibleLines) { line in
-                        Text(line.text)
+                        styledLineText(line)
                             .font(.system(size: fontSize, weight: .medium))
-                            .foregroundStyle(line.isPartial ? .white.opacity(0.7) : .white)
-                            .italic(line.isPartial)
                             .multilineTextAlignment(.center)
                     }
                 }
@@ -74,5 +72,17 @@ struct SubtitleOverlayView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityLabel("Subtitle overlay")
         .accessibilityHint("Press Command-D to dismiss")
+    }
+
+    private func styledLineText(_ line: TranscriptLine) -> Text {
+        if let prefix = line.finalizedPrefix {
+            let suffix = String(line.text.dropFirst(prefix.count))
+            return Text(prefix).foregroundStyle(.white)
+                + Text(suffix).foregroundStyle(.white.opacity(0.7)).italic()
+        } else if line.isPartial {
+            return Text(line.text).foregroundStyle(.white.opacity(0.7)).italic()
+        } else {
+            return Text(line.text).foregroundStyle(.white)
+        }
     }
 }

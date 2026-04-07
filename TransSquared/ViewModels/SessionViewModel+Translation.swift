@@ -120,6 +120,8 @@ extension SessionViewModel {
         }
 
         translationSlots[slot].partialEntryID = entryID
+        // Remove stale partial items for this entry — only the latest partial matters.
+        translationSlots[slot].queue.removeAll { $0.isPartial && $0.entryID == entryID }
         enqueueTranslation(slot: slot, item: TranslationQueueItem(
             sentence: text, entryID: entryID, isPartial: true, elapsedTime: entries[idx].elapsedTime
         ))

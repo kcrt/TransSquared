@@ -88,33 +88,45 @@ struct TranscriptEntry: Identifiable, Sendable {
         self.isCommitted = isCommitted
     }
 
-    /// Derives `TranscriptLine`(s) for the source pane.
-    /// When both finalized text and a pending partial exist, they are returned as
-    /// **separate lines** so the finalized text stays stable and the partial appears below it.
+    /// Derives a `TranscriptLine` for the source pane.
+    /// When both finalized text and a pending partial exist, they are combined into
+    /// a **single line** with `finalizedPrefix` set so the view can style each portion differently.
     func sourceTranscriptLines() -> [TranscriptLine] {
         if isSeparator {
             return [TranscriptLine(id: id, text: "", isPartial: false, isSeparator: true)]
         }
-        var lines: [TranscriptLine] = []
-        if !source.text.isEmpty {
-            lines.append(TranscriptLine(
+        if let partial = pendingPartial, !partial.isEmpty {
+            if !source.text.isEmpty {
+                // Combined: finalized prefix + partial suffix in one line
+                return [TranscriptLine(
+                    id: source.id,
+                    text: source.text + partial,
+                    isPartial: true,
+                    elapsedTime: elapsedTime,
+                    duration: duration,
+                    finalizedPrefix: source.text
+                )]
+            } else {
+                // Pure partial
+                return [TranscriptLine(
+                    id: source.id,
+                    text: partial,
+                    isPartial: true,
+                    elapsedTime: elapsedTime
+                )]
+            }
+        } else if !source.text.isEmpty {
+            // Pure finalized
+            return [TranscriptLine(
                 id: source.id,
                 text: source.text,
                 isPartial: false,
                 elapsedTime: elapsedTime,
                 duration: duration,
                 sentenceID: isCommitted ? id : nil
-            ))
+            )]
         }
-        if let partial = pendingPartial, !partial.isEmpty {
-            lines.append(TranscriptLine(
-                id: source.text.isEmpty ? source.id : id,
-                text: partial,
-                isPartial: true,
-                elapsedTime: source.text.isEmpty ? elapsedTime : nil
-            ))
-        }
-        return lines
+        return []
     }
 
     /// Derives a `TranscriptLine` for the translation pane of the given slot, or `nil` if no translation exists.
@@ -149,6 +161,10 @@ struct TranscriptLine: Identifiable, Sendable {
     var duration: TimeInterval?
     /// The entry ID (sentence ID) this line belongs to.
     var sentenceID: UUID?
+    /// When non-nil, the leading portion of `text` that has been finalized.
+    /// The remainder (after this prefix) is still partial/in-progress.
+    /// Used to render mixed finalized + partial styling within a single line.
+    var finalizedPrefix: String?
 
     init(
         id: UUID = UUID(),
@@ -158,7 +174,8 @@ struct TranscriptLine: Identifiable, Sendable {
         isSeparator: Bool = false,
         elapsedTime: TimeInterval? = nil,
         duration: TimeInterval? = nil,
-        sentenceID: UUID? = nil
+        sentenceID: UUID? = nil,
+        finalizedPrefix: String? = nil
     ) {
         self.id = id
         self.text = text
@@ -168,6 +185,7 @@ struct TranscriptLine: Identifiable, Sendable {
         self.elapsedTime = elapsedTime
         self.duration = duration
         self.sentenceID = sentenceID
+        self.finalizedPrefix = finalizedPrefix
     }
 }
 

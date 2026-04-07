@@ -145,12 +145,22 @@ struct TranscriptPaneView: View {
                     startEditing(line)
                 }
         } else {
-            Text(line.text)
+            styledLineText(line)
                 .font(.system(size: fontSize))
-                .foregroundStyle(line.isPartial ? .secondary : .primary)
-                .italic(line.isPartial)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func styledLineText(_ line: TranscriptLine) -> Text {
+        if let prefix = line.finalizedPrefix {
+            let suffix = String(line.text.dropFirst(prefix.count))
+            return Text(prefix).foregroundStyle(.primary)
+                + Text(suffix).foregroundStyle(.secondary).italic()
+        } else if line.isPartial {
+            return Text(line.text).foregroundStyle(.secondary).italic()
+        } else {
+            return Text(line.text).foregroundStyle(.primary)
         }
     }
 
