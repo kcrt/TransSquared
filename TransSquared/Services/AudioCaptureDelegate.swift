@@ -25,6 +25,13 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
     private var conversionRatio: Double = 1.0
     private var pipelineReady = false
 
+    /// When the source has more channels than the target, we manually extract
+    /// channel 0 into this mono buffer before passing it to the converter.
+    /// AVAudioConverter's built-in stereo→mono downmix produces silent output
+    /// on certain virtual audio drivers (e.g. BlackHole).
+    private var needsChannelExtraction = false
+    private var monoSourceFormat: AVAudioFormat?
+
     // Accumulation buffer: collect small chunks before yielding to the analyzer.
     // 4800 frames @ 16 kHz = 300 ms — enough context for the speech recognizer.
     private static let accumulationFrameCount: AVAudioFrameCount = 4800
@@ -110,8 +117,32 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
 
         if needsConversion {
             self.conversionRatio = targetFormat.sampleRate / srcFormat.sampleRate
-            guard let conv = AVAudioConverter(from: srcFormat, to: targetFormat) else {
-                logger.error("Failed to create AVAudioConverter: \(srcFormat) → \(self.targetFormat)")
+
+            // When the source has more channels than the target (e.g. stereo
+            // → mono), we extract channel 0 manually and give the converter a
+            // mono-to-mono job. AVAudioConverter's built-in channel downmix
+            // produces silent output with certain drivers (e.g. BlackHole).
+            let converterSrcFormat: AVAudioFormat
+            if srcFormat.channelCount > targetFormat.channelCount {
+                guard let monoFmt = AVAudioFormat(
+                    commonFormat: srcFormat.commonFormat,
+                    sampleRate: srcFormat.sampleRate,
+                    channels: targetFormat.channelCount,
+                    interleaved: false
+                ) else {
+                    logger.error("Failed to create mono source format")
+                    return false
+                }
+                self.monoSourceFormat = monoFmt
+                self.needsChannelExtraction = true
+                converterSrcFormat = monoFmt
+                logger.info("Channel extraction enabled: \(srcFormat.channelCount)ch → \(self.targetFormat.channelCount)ch (manual)")
+            } else {
+                converterSrcFormat = srcFormat
+            }
+
+            guard let conv = AVAudioConverter(from: converterSrcFormat, to: targetFormat) else {
+                logger.error("Failed to create AVAudioConverter: \(converterSrcFormat) → \(self.targetFormat)")
                 return false
             }
             self.converter = conv
@@ -127,10 +158,29 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
     // MARK: - Format conversion
 
     /// Resamples a PCM buffer from `sourceFormat` to `targetFormat`.
+    /// When the source has more channels than the target, channel 0 is
+    /// extracted first and the converter only performs sample rate conversion.
     private func convert(_ pcmBuffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
         guard let converter else { return nil }
 
-        let capacity = max(1, AVAudioFrameCount(Double(pcmBuffer.frameLength) * conversionRatio) + 1)
+        // If source is multi-channel, extract channel 0 into a mono buffer.
+        let inputBuffer: AVAudioPCMBuffer
+        if needsChannelExtraction, let monoFmt = monoSourceFormat,
+           let srcFloat = pcmBuffer.floatChannelData {
+            guard let mono = AVAudioPCMBuffer(
+                pcmFormat: monoFmt,
+                frameCapacity: pcmBuffer.frameLength
+            ), let dstFloat = mono.floatChannelData else {
+                return nil
+            }
+            mono.frameLength = pcmBuffer.frameLength
+            memcpy(dstFloat[0], srcFloat[0], Int(pcmBuffer.frameLength) * MemoryLayout<Float>.size)
+            inputBuffer = mono
+        } else {
+            inputBuffer = pcmBuffer
+        }
+
+        let capacity = max(1, AVAudioFrameCount(Double(inputBuffer.frameLength) * conversionRatio) + 1)
         guard let convertedBuffer = AVAudioPCMBuffer(
             pcmFormat: targetFormat,
             frameCapacity: capacity
@@ -142,7 +192,7 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
         var error: NSError?
         let status = converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
             outStatus.pointee = .haveData
-            return pcmBuffer
+            return inputBuffer
         }
 
         if let error {
