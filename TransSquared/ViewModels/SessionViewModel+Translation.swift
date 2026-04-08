@@ -31,16 +31,23 @@ extension SessionViewModel {
         while slot < translationSlots.count && !translationSlots[slot].queue.isEmpty {
             let item = translationSlots[slot].queue.removeFirst()
             translationSlots[slot].currentItem = item
-            let resultText = await translateSentence(item.sentence, using: session, slot: slot, entryID: item.entryID, isPartial: item.isPartial)
+            let result = await translateSentence(item.sentence, using: session, slot: slot, entryID: item.entryID, isPartial: item.isPartial)
             if slot < translationSlots.count {
                 translationSlots[slot].currentItem = nil
-                if let resultText {
+                if let resultText = result.text {
                     translationSlots[slot].recentlyCompleted.append(
                         CompletedTranslationItem(source: item, resultText: resultText, completedAt: Date())
                     )
                     // Prune items older than 6 seconds (buffer beyond the 5s display).
                     let cutoff = Date().addingTimeInterval(-6)
                     translationSlots[slot].recentlyCompleted.removeAll { $0.completedAt < cutoff }
+                }
+                // Session was invalidated — stop processing with this session.
+                // Re-enqueued items will be picked up when a new session is provided.
+                if result.sessionInvalidated {
+                    logger.info("Slot \(slot) session invalidated, breaking out of processing loop (\(self.translationSlots[slot].queue.count) items remaining)")
+                    translationSlots[slot].config?.invalidate()
+                    break
                 }
             }
         }
@@ -71,6 +78,12 @@ extension SessionViewModel {
     func enqueueTranslation(slot: Int, item: TranslationQueueItem) {
         guard slot < translationSlots.count else { return }
         translationSlots[slot].queue.append(item)
+        #if DEBUG
+        let queueSize = translationSlots[slot].queue.count
+        if queueSize > (debugPeakQueueSize[slot] ?? 0) {
+            debugPeakQueueSize[slot] = queueSize
+        }
+        #endif
         if !translationSlots[slot].isProcessing {
             translationSlots[slot].config?.invalidate()
         }
@@ -195,7 +208,14 @@ extension SessionViewModel {
         // logger.debug("Queuing for translation (slot: \(slot), entryID: \(entryID))")
     }
 
-    private func translateSentence(_ sentence: String, using session: TranslationSession, slot: Int, entryID: UUID, isPartial: Bool) async -> String? {
+    /// Result of a single translation attempt, indicating both the translated text (if any)
+    /// and whether the session was invalidated (requiring a new session to continue).
+    struct TranslationAttemptResult {
+        var text: String?
+        var sessionInvalidated: Bool = false
+    }
+
+    private func translateSentence(_ sentence: String, using session: TranslationSession, slot: Int, entryID: UUID, isPartial: Bool) async -> TranslationAttemptResult {
         // logger.debug("Translating slot \(slot) (\(isPartial ? "partial" : "final")): \"\(sentence, privacy: .private)\"")
         do {
             let response = try await session.translate(sentence)
@@ -205,14 +225,14 @@ extension SessionViewModel {
             guard slot < translationSlots.count,
                   let entryIdx = entryIndex(for: entryID) else {
                 // logger.debug("Slot \(slot) entry \(entryID) no longer valid after translation, discarding result")
-                return nil
+                return TranslationAttemptResult()
             }
 
             let existing = entries[entryIdx].translations[slot]
 
             if isPartial {
                 // Only update if the translation is still partial (a finalized translation may have arrived)
-                guard existing?.isPartial == true, let existingID = existing?.id else { return nil }
+                guard existing?.isPartial == true, let existingID = existing?.id else { return TranslationAttemptResult() }
                 entries[entryIdx].translations[slot] = TransString(
                     id: existingID, text: response.targetText, isPartial: true
                 )
@@ -221,10 +241,13 @@ extension SessionViewModel {
                     id: existing?.id ?? UUID(), text: response.targetText, isPartial: false, finalizedAt: Date()
                 )
             }
-            return response.targetText
+            #if DEBUG
+            debugTranslationSuccessCount[slot, default: 0] += 1
+            #endif
+            return TranslationAttemptResult(text: response.targetText)
         } catch is CancellationError {
             logger.info("Slot \(slot) translation cancelled")
-            return nil
+            return TranslationAttemptResult()
         } catch where Self.isTranslationSessionCancellation(error) {
             let nsError = error as NSError
             logger.info("Slot \(slot) translation session cancelled (domain: \(nsError.domain), code: \(nsError.code)), re-enqueueing")
@@ -233,16 +256,22 @@ extension SessionViewModel {
                 translationSlots[slot].queue.insert(
                     TranslationQueueItem(sentence: sentence, entryID: entryID, isPartial: isPartial, elapsedTime: elapsed), at: 0
                 )
+                #if DEBUG
+                debugTranslationReenqueueCount[slot, default: 0] += 1
+                #endif
             }
-            return nil
+            return TranslationAttemptResult(sessionInvalidated: true)
         } catch {
             logger.error("Slot \(slot) translation failed: \(error.localizedDescription)")
-            guard !isPartial, let entryIdx = entryIndex(for: entryID) else { return nil }
+            #if DEBUG
+            debugTranslationFailureCount[slot, default: 0] += 1
+            #endif
+            guard !isPartial, let entryIdx = entryIndex(for: entryID) else { return TranslationAttemptResult() }
             let existing = entries[entryIdx].translations[slot]
             entries[entryIdx].translations[slot] = TransString(
                 id: existing?.id ?? UUID(), text: "[Translation failed]", isPartial: false, finalizedAt: Date()
             )
-            return "[Translation failed]"
+            return TranslationAttemptResult(text: "[Translation failed]")
         }
     }
 

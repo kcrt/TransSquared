@@ -29,25 +29,55 @@ final class SessionViewModel {
     // MARK: - Published State
 
     /// The source of truth for all transcript data. Each entry groups source segments with translations.
-    var entries: [TranscriptEntry] = []
+    var entries: [TranscriptEntry] = [] {
+        didSet { scheduleDisplayUpdate() }
+    }
     /// Translation slots — one per target language (always `targetCount` active slots).
     /// Slots manage queue state; translation results are stored in `entries`.
     var translationSlots: [TranslationSlot] = [TranslationSlot()]
 
-    /// Derived source lines for the UI, computed from entries.
-    var sourceLines: [TranscriptLine] {
-        entries.flatMap { $0.sourceTranscriptLines() }
+    /// Cached source lines for the UI. Updated via `scheduleDisplayUpdate()` to avoid
+    /// O(n) recomputation on every SwiftUI body evaluation.
+    private(set) var sourceLines: [TranscriptLine] = []
+    /// Cached translation lines per slot. Updated alongside `sourceLines`.
+    private(set) var translationLinesPerSlot: [[TranscriptLine]] = []
+
+    /// Returns cached translation lines for the given slot.
+    func translationLines(forSlot slot: Int) -> [TranscriptLine] {
+        guard slot < translationLinesPerSlot.count else { return [] }
+        return translationLinesPerSlot[slot]
     }
 
-    /// Derives translation lines for the given slot from entries.
-    func translationLines(forSlot slot: Int) -> [TranscriptLine] {
-        entries.compactMap { entry in
-            if entry.isSeparator {
-                return TranscriptLine(id: entry.id, text: "", isPartial: false, isSeparator: true)
-            }
-            return entry.translationTranscriptLine(forSlot: slot)
+    /// Flag to coalesce multiple rapid `entries` mutations into a single display update.
+    @ObservationIgnored private var displayUpdatePending = false
+
+    /// Schedules a coalesced display lines recomputation. Multiple calls within the same
+    /// MainActor turn are collapsed into a single update, preventing SwiftUI from being
+    /// overwhelmed by high-frequency `entries` mutations during long recordings.
+    private func scheduleDisplayUpdate() {
+        guard !displayUpdatePending else { return }
+        displayUpdatePending = true
+        Task { @MainActor in
+            self.displayUpdatePending = false
+            self.recomputeDisplayLines()
         }
     }
+
+    /// Immediately recomputes cached display lines from `entries`.
+    /// Use for bulk operations (clear, reset) where the update must be visible immediately.
+    func recomputeDisplayLines() {
+        displayUpdatePending = false
+        sourceLines = entries.flatMap { $0.sourceTranscriptLines() }
+        translationLinesPerSlot = (0..<targetCount).map { slot in
+            entries.compactMap { entry in
+                if entry.isSeparator {
+                    return TranscriptLine(id: entry.id, text: "", isPartial: false, isSeparator: true)
+                }
+                return entry.translationTranscriptLine(forSlot: slot)
+            }
+        }
+    }
+
     var isSessionActive = false
     
 
@@ -237,6 +267,19 @@ final class SessionViewModel {
     /// Total elapsed time accumulated from previous start/stop cycles.
     var accumulatedElapsedTime: TimeInterval = 0
     var segmentIndex = 0
+
+    // MARK: - Debug Counters
+
+    #if DEBUG
+    /// Per-slot count of translation re-enqueue events (session cancellation recovery).
+    var debugTranslationReenqueueCount: [Int: Int] = [:]
+    /// Per-slot count of successful translations.
+    var debugTranslationSuccessCount: [Int: Int] = [:]
+    /// Per-slot count of failed translations.
+    var debugTranslationFailureCount: [Int: Int] = [:]
+    /// Per-slot peak queue size observed during this session.
+    var debugPeakQueueSize: [Int: Int] = [:]
+    #endif
 
     // MARK: - Entry Index Map (O(1) lookup by UUID)
 
@@ -736,6 +779,7 @@ final class SessionViewModel {
     func resetTranscriptState() {
         entries.removeAll()
         rebuildEntryIndexMap()
+        recomputeDisplayLines()
         cleanupTranslationSlotState()
         clearAllTranslationQueues()
         segmentIndex = 0

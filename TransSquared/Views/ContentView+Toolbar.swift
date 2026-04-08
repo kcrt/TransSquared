@@ -13,14 +13,14 @@ extension ContentView {
             Button {
                 viewModel.showAudioPopover.toggle()
             } label: {
-                AudioWaveformView(levels: viewModel.audioLevelMonitor.levels, isActive: viewModel.isSessionActive)
+                AudioWaveformView(monitor: viewModel.audioLevelMonitor, isActive: viewModel.isSessionActive)
                     .frame(width: 60, height: 20)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .popover(isPresented: Bindable(viewModel).showAudioPopover) {
                 AudioLevelPopoverView(
-                    audioLevels: viewModel.audioLevelMonitor.levels,
+                    monitor: viewModel.audioLevelMonitor,
                     isActive: viewModel.isSessionActive,
                     silenceThreshold: SessionViewModel.silenceThreshold,
                     inputDeviceName: (viewModel.selectedMicrophone ?? AVCaptureDevice.default(for: .audio))?.localizedName,

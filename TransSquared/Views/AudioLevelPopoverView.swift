@@ -3,7 +3,8 @@ import SwiftUI
 /// Popover content showing a real-time audio level chart with dB axis,
 /// a silence-threshold line, and microphone input volume control.
 struct AudioLevelPopoverView: View {
-    var audioLevels: [Float]
+    /// Observe the monitor directly to isolate level-change updates to this view.
+    var monitor: AudioLevelMonitor
     var isActive: Bool
     var silenceThreshold: Float
     var inputDeviceName: String?
@@ -50,7 +51,8 @@ struct AudioLevelPopoverView: View {
     // MARK: - Audio Level Chart
 
     private var audioChart: some View {
-        HStack(spacing: 0) {
+        let audioLevels = monitor.levels
+        return HStack(spacing: 0) {
             dbAxis
                 .frame(width: 44)
 
@@ -165,8 +167,9 @@ struct AudioLevelPopoverView: View {
 
 }
 #Preview {
+    let monitor = AudioLevelMonitor()
     AudioLevelPopoverView(
-        audioLevels: (0..<20).map { _ in Float.random(in: 0...0.8) },
+        monitor: monitor,
         isActive: true,
         silenceThreshold: 0.2,
         volumeService: nil

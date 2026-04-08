@@ -5,6 +5,7 @@ import SwiftUI
 
 /// Navigation items for the debug inspector sidebar.
 private enum DebugPage: Hashable {
+    case health
     case session
     case sentenceBuffer
     case slot(Int)
@@ -17,7 +18,7 @@ private enum DebugPage: Hashable {
 /// Debug window that visualizes the internal state of queues, translation slots, and transcript entries.
 struct DebugWindowView: View {
     let viewModel: SessionViewModel
-    @State private var selection: DebugPage? = .session
+    @State private var selection: DebugPage? = .health
 
     var body: some View {
         NavigationSplitView {
@@ -35,6 +36,9 @@ struct DebugWindowView: View {
     private var sidebar: some View {
         List(selection: $selection) {
             Section("Overview") {
+                Label("Health Monitor", systemImage: "heart.text.clipboard")
+                    .tag(DebugPage.health)
+
                 Label {
                     HStack {
                         Text("Session")
@@ -161,6 +165,8 @@ struct DebugWindowView: View {
     @ViewBuilder
     private var detailView: some View {
         switch selection {
+        case .health:
+            HealthMonitorDetailView(viewModel: viewModel)
         case .session:
             SessionDetailView(viewModel: viewModel)
         case .sentenceBuffer:
@@ -194,6 +200,255 @@ struct DebugWindowView: View {
             Image(systemName: "circle.dotted")
                 .font(.caption2)
                 .foregroundStyle(.orange)
+        }
+    }
+}
+
+// MARK: - Memory Monitor
+
+/// Samples resident memory at a fixed 1-second interval, independent of SwiftUI view lifecycle.
+/// Keeping this as a standalone `@Observable` class prevents `@State` resets caused by
+/// parent view re-evaluations (which happen frequently when `SessionViewModel` changes).
+@Observable
+@MainActor
+private final class MemoryMonitor {
+    struct Sample {
+        let date: Date
+        let bytes: UInt64
+    }
+
+    private(set) var samples: [Sample] = []
+    private var timer: Task<Void, Never>?
+    static let maxSamples = 60
+
+    var currentBytes: UInt64 { samples.last?.bytes ?? 0 }
+
+    /// Memory growth rate in bytes/second, computed over the full sample window.
+    var growthRate: Double {
+        guard samples.count >= 2,
+              let first = samples.first,
+              let last = samples.last else { return 0 }
+        let elapsed = last.date.timeIntervalSince(first.date)
+        guard elapsed > 1 else { return 0 }
+        return Double(Int64(last.bytes) - Int64(first.bytes)) / elapsed
+    }
+
+    func start() {
+        guard timer == nil else { return }
+        timer = Task { [weak self] in
+            while !Task.isCancelled {
+                self?.recordSample()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    func stop() {
+        timer?.cancel()
+        timer = nil
+    }
+
+    private func recordSample() {
+        guard let bytes = Self.residentMemoryBytes() else { return }
+        samples.append(Sample(date: Date(), bytes: bytes))
+        if samples.count > Self.maxSamples {
+            samples.removeFirst(samples.count - Self.maxSamples)
+        }
+    }
+
+    private static func residentMemoryBytes() -> UInt64? {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) { infoPtr in
+            infoPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rawPtr in
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), rawPtr, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? info.resident_size : nil
+    }
+}
+
+private func formatBytes(_ bytes: UInt64) -> String {
+    let mb = Double(bytes) / (1024 * 1024)
+    if mb >= 1024 {
+        return String(format: "%.1f GB", mb / 1024)
+    }
+    return String(format: "%.1f MB", mb)
+}
+
+private func formatGrowthRate(_ rate: Double) -> String {
+    let absMB = abs(rate) / (1024 * 1024)
+    let sign = rate >= 0 ? "+" : "-"
+    if absMB >= 1 {
+        return String(format: "%@%.1f MB/s", sign, absMB)
+    }
+    let absKB = abs(rate) / 1024
+    return String(format: "%@%.0f KB/s", sign, absKB)
+}
+
+private func growthRateColor(_ rate: Double) -> Color {
+    let mbPerSec = rate / (1024 * 1024)
+    if mbPerSec > 1 { return .red }
+    if mbPerSec > 0.1 { return .orange }
+    return .secondary
+}
+
+// MARK: - Health Monitor Detail
+
+private struct HealthMonitorDetailView: View {
+    let viewModel: SessionViewModel
+    @State private var monitor = MemoryMonitor()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Text("Health Monitor")
+                        .font(.system(.title2, design: .monospaced, weight: .bold))
+                    Spacer()
+                    if monitor.growthRate > 1_000_000 {
+                        Text("MEMORY ALERT")
+                            .font(.system(.caption, design: .monospaced, weight: .bold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(.red.opacity(0.3))
+                            .clipShape(Capsule())
+                    }
+                }
+
+                // Memory Section
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Memory")
+                            .font(.system(.headline, design: .monospaced))
+
+                        Grid(alignment: .leading, verticalSpacing: 6) {
+                            LabeledGridRow("Resident Memory", value: formatBytes(monitor.currentBytes))
+                            LabeledGridRow("Growth Rate",
+                                           value: formatGrowthRate(monitor.growthRate),
+                                           color: growthRateColor(monitor.growthRate))
+                            LabeledGridRow("Samples", value: "\(monitor.samples.count)/\(MemoryMonitor.maxSamples)")
+                        }
+
+                        // Sparkline of memory values
+                        if monitor.samples.count >= 2 {
+                            memorySparkline
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(4)
+                }
+
+                // Entries Section
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Entries")
+                            .font(.system(.headline, design: .monospaced))
+
+                        let committed = viewModel.entries.filter { $0.isCommitted }.count
+                        let separators = viewModel.entries.filter { $0.isSeparator }.count
+                        let building = viewModel.entries.count - committed - separators
+
+                        Grid(alignment: .leading, verticalSpacing: 6) {
+                            LabeledGridRow("Total", value: "\(viewModel.entries.count)")
+                            LabeledGridRow("Committed", value: "\(committed)")
+                            LabeledGridRow("Building", value: "\(building)",
+                                           color: building > 0 ? .orange : .secondary)
+                            LabeledGridRow("Separators", value: "\(separators)")
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(4)
+                }
+
+                // Translation Stats Section
+                translationStatsSection
+            }
+            .padding()
+        }
+        .onAppear { monitor.start() }
+        .onDisappear { monitor.stop() }
+    }
+
+    // MARK: - Memory Sparkline
+
+    @ViewBuilder
+    private var memorySparkline: some View {
+        let values = monitor.samples.map { Double($0.bytes) }
+        let minVal = values.min() ?? 0
+        let maxVal = values.max() ?? 1
+        let range = max(maxVal - minVal, 1)
+
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 0) {
+                Text(formatBytes(UInt64(maxVal)))
+                Spacer()
+            }
+            .font(.system(.caption2, design: .monospaced))
+            .foregroundStyle(.secondary)
+
+            Canvas { context, size in
+                guard values.count >= 2 else { return }
+                var path = Path()
+                for (i, val) in values.enumerated() {
+                    let x = size.width * CGFloat(i) / CGFloat(values.count - 1)
+                    let y = size.height * (1.0 - CGFloat((val - minVal) / range))
+                    if i == 0 {
+                        path.move(to: CGPoint(x: x, y: y))
+                    } else {
+                        path.addLine(to: CGPoint(x: x, y: y))
+                    }
+                }
+                context.stroke(path, with: .color(growthRateColor(monitor.growthRate)), lineWidth: 1.5)
+            }
+            .frame(height: 40)
+            .background(Color.gray.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+
+            HStack {
+                Text(formatBytes(UInt64(minVal)))
+                Spacer()
+                Text("last \(monitor.samples.count)s")
+            }
+            .font(.system(.caption2, design: .monospaced))
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - Translation Stats
+
+    @ViewBuilder
+    private var translationStatsSection: some View {
+        ForEach(0..<viewModel.translationSlots.count, id: \.self) { slot in
+            let langId = slot < viewModel.targetLanguageIdentifiers.count
+                ? viewModel.targetLanguageIdentifiers[slot] : "?"
+            GroupBox {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Slot \(slot) (\(langId))")
+                            .font(.system(.headline, design: .monospaced))
+                        Spacer()
+                        if viewModel.translationSlots[slot].isProcessing {
+                            Circle().fill(.green).frame(width: 8, height: 8)
+                        }
+                    }
+
+                    Grid(alignment: .leading, verticalSpacing: 6) {
+                        LabeledGridRow("Queue Size", value: "\(viewModel.translationSlots[slot].queue.count)",
+                                       color: viewModel.translationSlots[slot].queue.count > 5 ? .red : .primary)
+                        LabeledGridRow("Success", value: "\(viewModel.debugTranslationSuccessCount[slot] ?? 0)")
+                        LabeledGridRow("Failed", value: "\(viewModel.debugTranslationFailureCount[slot] ?? 0)",
+                                       color: (viewModel.debugTranslationFailureCount[slot] ?? 0) > 0 ? .red : .secondary)
+                        LabeledGridRow("Re-enqueued", value: "\(viewModel.debugTranslationReenqueueCount[slot] ?? 0)",
+                                       color: (viewModel.debugTranslationReenqueueCount[slot] ?? 0) > 0 ? .orange : .secondary)
+                        LabeledGridRow("Peak Queue", value: "\(viewModel.debugPeakQueueSize[slot] ?? 0)",
+                                       color: (viewModel.debugPeakQueueSize[slot] ?? 0) > 10 ? .red : .primary)
+                        LabeledGridRow("Recently Completed", value: "\(viewModel.translationSlots[slot].recentlyCompleted.count)")
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(4)
+            }
         }
     }
 }

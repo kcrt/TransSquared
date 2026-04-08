@@ -258,7 +258,10 @@ extension NSPasteboard {
 // MARK: - Audio Waveform Visualization
 
 struct AudioWaveformView: View {
-    var levels: [Float]
+    /// Observe the monitor directly so that level updates only invalidate this view,
+    /// not the parent (ContentView) body. This prevents high-frequency audio level
+    /// changes from triggering expensive re-evaluation of the entire view hierarchy.
+    var monitor: AudioLevelMonitor
     var isActive: Bool
 
     private let barSpacing: CGFloat = 1
@@ -274,6 +277,7 @@ struct AudioWaveformView: View {
     }
 
     var body: some View {
+        let levels = monitor.levels
         HStack(spacing: barSpacing) {
             ForEach(levels.indices, id: \.self) { index in
                 let level = CGFloat(levels[index])
