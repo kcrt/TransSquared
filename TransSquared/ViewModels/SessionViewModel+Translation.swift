@@ -46,7 +46,9 @@ extension SessionViewModel {
                 // Re-enqueued items will be picked up when a new session is provided.
                 if result.sessionInvalidated {
                     logger.info("Slot \(slot) session invalidated, breaking out of processing loop (\(self.translationSlots[slot].queue.count) items remaining)")
-                    translationSlots[slot].config?.invalidate()
+                    if slot < translationConfigs.count {
+                        translationConfigs[slot]?.invalidate()
+                    }
                     break
                 }
             }
@@ -84,8 +86,8 @@ extension SessionViewModel {
             debugPeakQueueSize[slot] = queueSize
         }
         #endif
-        if !translationSlots[slot].isProcessing {
-            translationSlots[slot].config?.invalidate()
+        if !translationSlots[slot].isProcessing, slot < translationConfigs.count {
+            translationConfigs[slot]?.invalidate()
         }
     }
 

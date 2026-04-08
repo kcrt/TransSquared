@@ -54,8 +54,8 @@ extension SessionViewModel {
         translationSlots[slot].queue.removeAll { $0.entryID == entryID }
 
         // Ensure translation session is available
-        if translationSlots[slot].config == nil, slot < targetLanguageIdentifiers.count {
-            translationSlots[slot].config = translationConfig(forSlot: slot)
+        if slot < translationConfigs.count, translationConfigs[slot] == nil, slot < targetLanguageIdentifiers.count {
+            translationConfigs[slot] = translationConfig(forSlot: slot)
         }
 
         // Enqueue the re-translation

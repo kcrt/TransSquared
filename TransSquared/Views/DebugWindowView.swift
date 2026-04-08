@@ -562,8 +562,8 @@ private struct SlotDetailView: View {
                                        color: slot.isProcessing ? .green : .secondary)
                         LabeledGridRow("Queue Size", value: "\(slot.queue.count)",
                                        color: slot.queue.isEmpty ? .secondary : .orange)
-                        LabeledGridRow("Config", value: slot.config != nil ? "Set" : "nil",
-                                       color: slot.config != nil ? .green : .secondary)
+                        LabeledGridRow("Config", value: slotIndex < viewModel.translationConfigs.count && viewModel.translationConfigs[slotIndex] != nil ? "Set" : "nil",
+                                       color: slotIndex < viewModel.translationConfigs.count && viewModel.translationConfigs[slotIndex] != nil ? .green : .secondary)
                     }
 
                     // Currently translating

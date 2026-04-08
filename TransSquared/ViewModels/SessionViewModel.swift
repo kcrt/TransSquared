@@ -34,7 +34,13 @@ final class SessionViewModel {
     }
     /// Translation slots — one per target language (always `targetCount` active slots).
     /// Slots manage queue state; translation results are stored in `entries`.
+    /// Note: Views should NOT observe this property — use `translationConfigs` for session configs.
     var translationSlots: [TranslationSlot] = [TranslationSlot()]
+
+    /// Translation session configs, separated from `translationSlots` to prevent
+    /// high-frequency queue mutations from triggering ContentView re-renders.
+    /// Only changes when languages change or a session needs to be recreated.
+    var translationConfigs: [TranslationSession.Configuration?] = [nil]
 
     /// Cached source lines for the UI. Updated via `scheduleDisplayUpdate()` to avoid
     /// O(n) recomputation on every SwiftUI body evaluation.
@@ -50,15 +56,25 @@ final class SessionViewModel {
 
     /// Flag to coalesce multiple rapid `entries` mutations into a single display update.
     @ObservationIgnored private var displayUpdatePending = false
+    /// Timestamp of the last display lines recomputation, for throttling.
+    @ObservationIgnored private var lastDisplayUpdate: ContinuousClock.Instant = .now
+    /// Minimum interval between display updates (~10 fps is plenty for text UI).
+    private static let displayUpdateInterval: Duration = .milliseconds(100)
 
-    /// Schedules a coalesced display lines recomputation. Multiple calls within the same
-    /// MainActor turn are collapsed into a single update, preventing SwiftUI from being
-    /// overwhelmed by high-frequency `entries` mutations during long recordings.
+    /// Schedules a throttled display lines recomputation. Ensures at most one update
+    /// per `displayUpdateInterval`, batching rapid `entries` mutations (e.g. translation
+    /// results processed back-to-back) into a single SwiftUI update.
     private func scheduleDisplayUpdate() {
         guard !displayUpdatePending else { return }
         displayUpdatePending = true
+        let elapsed = ContinuousClock.now - lastDisplayUpdate
+        let delay = max(.zero, Self.displayUpdateInterval - elapsed)
         Task { @MainActor in
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+            }
             self.displayUpdatePending = false
+            self.lastDisplayUpdate = .now
             self.recomputeDisplayLines()
         }
     }
@@ -229,8 +245,10 @@ final class SessionViewModel {
     // MARK: - Computed Properties
 
     /// Whether there is any transcript content (source or translation) to export or clear.
+    /// Uses cached `sourceLines` instead of `entries` to avoid establishing a SwiftUI
+    /// observation dependency on the frequently-mutated `entries` array.
     var hasTranscriptContent: Bool {
-        !entries.isEmpty
+        !sourceLines.isEmpty
     }
 
     var sourceLocale: Locale {
@@ -343,13 +361,10 @@ final class SessionViewModel {
         return TranslationSession.Configuration(source: sourceLocale.language, target: targetLang)
     }
 
-    /// Creates fresh translation slots for the current target language configuration.
+    /// Creates fresh translation slots and configs for the current target language configuration.
     func makeTranslationSlots() -> [TranslationSlot] {
-        (0..<targetCount).map { i in
-            var slot = TranslationSlot()
-            slot.config = translationConfig(forSlot: i)
-            return slot
-        }
+        translationConfigs = (0..<targetCount).map { translationConfig(forSlot: $0) }
+        return (0..<targetCount).map { _ in TranslationSlot() }
     }
 
     static let partialTranslationDebounce: Duration = .milliseconds(300)

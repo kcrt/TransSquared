@@ -204,7 +204,7 @@ private struct TranslationTaskSlots: ViewModifier {
     }
 
     private func slotConfig(_ slot: Int) -> TranslationSession.Configuration? {
-        viewModel.translationSlots.indices.contains(slot) ? viewModel.translationSlots[slot].config : nil
+        slot < viewModel.translationConfigs.count ? viewModel.translationConfigs[slot] : nil
     }
 }
 

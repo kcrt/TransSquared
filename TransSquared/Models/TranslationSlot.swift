@@ -35,7 +35,6 @@ struct TranslationSlot {
     /// Incremented on each partial translation request; the debounce task re-waits
     /// when it detects the generation changed, avoiding Task creation churn.
     var partialDebounceGeneration: UInt64 = 0
-    var config: TranslationSession.Configuration?
     /// True while a `handleTranslationSession` loop is actively draining the queue.
     /// When set, enqueue skips `invalidate()` because the running session
     /// will pick up new items via its `while` loop.
@@ -56,6 +55,5 @@ struct TranslationSlot {
         currentItem = nil
         recentlyCompleted = []
         resetPartialState()
-        config = nil
     }
 }
