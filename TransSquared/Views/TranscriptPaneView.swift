@@ -8,6 +8,8 @@ struct TranscriptPaneView: View {
     var placeholder: String?
     var showElapsedTime: Bool = false
     var isEditable: Bool = false
+    /// When true, text changes animate with an interpolation transition (used for translation panes).
+    var animateTextChanges: Bool = false
     var onLineEdited: ((UUID, String) -> Void)?
     /// Called when a timestamp is tapped; passes the sentenceID of the tapped line.
     var onTimestampTapped: ((UUID) -> Void)?
@@ -140,6 +142,8 @@ struct TranscriptPaneView: View {
             Text(line.text)
                 .font(.system(size: fontSize))
                 .foregroundStyle(.primary)
+                .contentTransition(animateTextChanges ? .interpolate : .identity)
+                .animation(animateTextChanges ? .easeInOut(duration: 0.3) : nil, value: line.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .onTapGesture(count: 2) {
                     startEditing(line)
@@ -147,6 +151,8 @@ struct TranscriptPaneView: View {
         } else {
             styledLineText(line)
                 .font(.system(size: fontSize))
+                .contentTransition(animateTextChanges ? .interpolate : .identity)
+                .animation(animateTextChanges ? .easeInOut(duration: 0.3) : nil, value: line.text)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

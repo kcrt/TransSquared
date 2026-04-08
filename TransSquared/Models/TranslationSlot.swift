@@ -9,11 +9,23 @@ struct TranslationQueueItem: Sendable {
     let elapsedTime: TimeInterval?
 }
 
+/// A recently completed translation item for debug display.
+struct CompletedTranslationItem: Identifiable {
+    let id = UUID()
+    let source: TranslationQueueItem
+    let resultText: String
+    let completedAt: Date
+}
+
 /// Encapsulates the mutable translation state for one target language slot.
 /// Manages the translation queue and session lifecycle.
 /// Translation results are written to `TranscriptEntry.translations` in the view model.
 struct TranslationSlot {
     var queue: [TranslationQueueItem] = []
+    /// The item currently being translated (for debug tracking).
+    var currentItem: TranslationQueueItem?
+    /// Recently completed translation items for debug display.
+    var recentlyCompleted: [CompletedTranslationItem] = []
     var partialEntryID: UUID?
     var partialTranslationTimer: Task<Void, Never>?
     /// The most recent partial text awaiting debounced translation.
@@ -41,6 +53,8 @@ struct TranslationSlot {
     mutating func reset() {
         queue = []
         isProcessing = false
+        currentItem = nil
+        recentlyCompleted = []
         resetPartialState()
         config = nil
     }

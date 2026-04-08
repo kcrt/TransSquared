@@ -56,6 +56,8 @@ struct SubtitleOverlayView: View {
                     ForEach(visibleLines) { line in
                         styledLineText(line)
                             .font(.system(size: fontSize, weight: .medium))
+                            .contentTransition(.interpolate)
+                            .animation(.easeInOut(duration: 0.3), value: line.text)
                             .multilineTextAlignment(.center)
                     }
                 }

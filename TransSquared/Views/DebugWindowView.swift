@@ -177,12 +177,7 @@ struct DebugWindowView: View {
                 selection = .entry(id)
             })
         case .entry(let id):
-            if let idx = viewModel.entryIndex(for: id) {
-                EntryDetailView(viewModel: viewModel, entryIndex: idx)
-            } else {
-                Text("Entry not found")
-                    .foregroundStyle(.secondary)
-            }
+            EntryDetailView(viewModel: viewModel, entryID: id)
         case nil:
             Text("Select an item from the sidebar")
                 .foregroundStyle(.secondary)
@@ -289,58 +284,76 @@ private struct SlotDetailView: View {
     private var slot: TranslationSlot { viewModel.translationSlots[slotIndex] }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Slot \(slotIndex)")
-                        .font(.system(.title2, design: .monospaced, weight: .bold))
-                    if slotIndex < viewModel.targetLanguageIdentifiers.count {
-                        Text("(\(viewModel.targetLanguageIdentifiers[slotIndex]))")
-                            .font(.system(.title3, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    statusBadge
-                }
-
-                Grid(alignment: .leading, verticalSpacing: 6) {
-                    LabeledGridRow("Processing", value: slot.isProcessing ? "YES" : "NO",
-                                   color: slot.isProcessing ? .green : .secondary)
-                    LabeledGridRow("Queue Size", value: "\(slot.queue.count)",
-                                   color: slot.queue.isEmpty ? .secondary : .orange)
-                    Divider()
-                    LabeledGridRow("Partial Entry ID",
-                                   value: slot.partialEntryID?.uuidString.prefix(8).description ?? "—")
-                    LabeledGridRow("Pending Partial", value: slot.pendingPartialText ?? "—")
-                    LabeledGridRow("Pending Elapsed",
-                                   value: slot.pendingPartialElapsedTime.map { String(format: "%.1fs", $0) } ?? "—")
-                    LabeledGridRow("Debounce Gen", value: "\(slot.partialDebounceGeneration)")
-                    LabeledGridRow("Timer Active", value: slot.partialTranslationTimer != nil ? "YES" : "NO",
-                                   color: slot.partialTranslationTimer != nil ? .orange : .secondary)
-                    Divider()
-                    LabeledGridRow("Config", value: slot.config != nil ? "Set" : "nil",
-                                   color: slot.config != nil ? .green : .secondary)
-                }
-
-                if !slot.queue.isEmpty {
-                    Text("Queue Items")
-                        .font(.system(.headline, design: .monospaced))
-                        .padding(.top, 8)
-
-                    ForEach(Array(slot.queue.enumerated()), id: \.offset) { qIdx, item in
-                        queueItemCard(index: qIdx, item: item)
-                    }
-                } else {
-                    GroupBox {
-                        Text("Queue is empty")
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(8)
-                    }
-                }
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let visibleCompleted = slot.recentlyCompleted.filter {
+                context.date.timeIntervalSince($0.completedAt) < 5
             }
-            .padding()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Slot \(slotIndex)")
+                            .font(.system(.title2, design: .monospaced, weight: .bold))
+                        if slotIndex < viewModel.targetLanguageIdentifiers.count {
+                            Text("(\(viewModel.targetLanguageIdentifiers[slotIndex]))")
+                                .font(.system(.title3, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        statusBadge
+                    }
+
+                    Grid(alignment: .leading, verticalSpacing: 6) {
+                        LabeledGridRow("Processing", value: slot.isProcessing ? "YES" : "NO",
+                                       color: slot.isProcessing ? .green : .secondary)
+                        LabeledGridRow("Queue Size", value: "\(slot.queue.count)",
+                                       color: slot.queue.isEmpty ? .secondary : .orange)
+                        LabeledGridRow("Config", value: slot.config != nil ? "Set" : "nil",
+                                       color: slot.config != nil ? .green : .secondary)
+                    }
+
+                    // Currently translating
+                    if let current = slot.currentItem {
+                        sectionHeader("Translating", systemImage: "arrow.trianglehead.2.clockwise", color: .green)
+                        translatingCard(item: current)
+                    }
+
+                    // Queue
+                    if !slot.queue.isEmpty {
+                        sectionHeader("Queue (\(slot.queue.count))", systemImage: "tray.full", color: .orange)
+                        ForEach(Array(slot.queue.enumerated()), id: \.offset) { qIdx, item in
+                            queueItemCard(index: qIdx, item: item)
+                        }
+                    }
+
+                    // Recently completed (visible for 5 seconds)
+                    if !visibleCompleted.isEmpty {
+                        sectionHeader("Done", systemImage: "checkmark.circle", color: .green)
+                        ForEach(visibleCompleted.reversed()) { completed in
+                            completedCard(item: completed, now: context.date)
+                        }
+                    }
+
+                    // Empty state
+                    if slot.currentItem == nil && slot.queue.isEmpty && visibleCompleted.isEmpty {
+                        GroupBox {
+                            Text("Idle")
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(8)
+                        }
+                    }
+                }
+                .padding()
+            }
         }
+    }
+
+    @ViewBuilder
+    private func sectionHeader(_ title: String, systemImage: String, color: Color) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.system(.headline, design: .monospaced))
+            .foregroundStyle(color)
+            .padding(.top, 8)
     }
 
     @ViewBuilder
@@ -365,33 +378,91 @@ private struct SlotDetailView: View {
     }
 
     @ViewBuilder
-    private func queueItemCard(index: Int, item: TranslationQueueItem) -> some View {
+    private func translatingCard(item: TranslationQueueItem) -> some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text("[\(index)]")
-                        .foregroundStyle(.secondary)
-                    Text(item.isPartial ? "PARTIAL" : "FINAL")
-                        .font(.system(.caption, design: .monospaced))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(item.isPartial ? Color.yellow.opacity(0.3) : Color.blue.opacity(0.3))
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                    ProgressView()
+                        .controlSize(.small)
+                    partialFinalBadge(isPartial: item.isPartial)
                     Spacer()
-                    Text(item.entryID.uuidString.prefix(8))
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                    if let elapsed = item.elapsedTime {
-                        Text(String(format: "%.1fs", elapsed))
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
+                    itemMeta(entryID: item.entryID, elapsedTime: item.elapsedTime)
                 }
                 Text(item.sentence)
                     .textSelection(.enabled)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(2)
+        }
+    }
+
+    @ViewBuilder
+    private func queueItemCard(index: Int, item: TranslationQueueItem) -> some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("[\(index)]")
+                        .foregroundStyle(.secondary)
+                    partialFinalBadge(isPartial: item.isPartial)
+                    Spacer()
+                    itemMeta(entryID: item.entryID, elapsedTime: item.elapsedTime)
+                }
+                Text(item.sentence)
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(2)
+        }
+    }
+
+    @ViewBuilder
+    private func completedCard(item: CompletedTranslationItem, now: Date) -> some View {
+        let elapsed = now.timeIntervalSince(item.completedAt)
+        // Fully visible for 3s, fade out over the last 2s.
+        let opacity = max(0, min(1, (5 - elapsed) / 2))
+        GroupBox {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    partialFinalBadge(isPartial: item.source.isPartial)
+                    Spacer()
+                    itemMeta(entryID: item.source.entryID, elapsedTime: item.source.elapsedTime)
+                }
+                Text(item.source.sentence)
+                    .foregroundStyle(.secondary)
+                Text(item.resultText)
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(2)
+        }
+        .opacity(opacity)
+    }
+
+    // MARK: - Shared Badge Helpers
+
+    @ViewBuilder
+    private func partialFinalBadge(isPartial: Bool) -> some View {
+        Text(isPartial ? "PARTIAL" : "FINAL")
+            .font(.system(.caption, design: .monospaced))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(isPartial ? Color.yellow.opacity(0.3) : Color.blue.opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    @ViewBuilder
+    private func itemMeta(entryID: UUID, elapsedTime: TimeInterval?) -> some View {
+        HStack(spacing: 6) {
+            Text(entryID.uuidString.prefix(8))
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+            if let elapsed = elapsedTime {
+                Text(String(format: "%.1fs", elapsed))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
@@ -493,18 +564,29 @@ private struct EntriesListDetailView: View {
 
 private struct EntryDetailView: View {
     let viewModel: SessionViewModel
-    let entryIndex: Int
+    let entryID: UUID
 
-    private var entry: TranscriptEntry { viewModel.entries[entryIndex] }
+    private var entryIndex: Int? { viewModel.entryIndex(for: entryID) }
+    private var entry: TranscriptEntry? { entryIndex.map { viewModel.entries[$0] } }
 
     var body: some View {
+        if let entry, let entryIndex {
+            entryContent(entry: entry, index: entryIndex)
+        } else {
+            Text("Entry not found")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func entryContent(entry: TranscriptEntry, index: Int) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("Entry #\(entryIndex)")
+                    Text("Entry #\(index)")
                         .font(.system(.title2, design: .monospaced, weight: .bold))
                     Spacer()
-                    entryStateBadge
+                    entryStateBadge(entry)
                 }
 
                 Grid(alignment: .leading, verticalSpacing: 6) {
@@ -568,7 +650,7 @@ private struct EntryDetailView: View {
     }
 
     @ViewBuilder
-    private var entryStateBadge: some View {
+    private func entryStateBadge(_ entry: TranscriptEntry) -> some View {
         let label = entry.isSeparator ? "SEPARATOR" : (entry.isCommitted ? "COMMITTED" : "BUILDING")
         let color: Color = entry.isSeparator ? .gray : (entry.isCommitted ? .green : .yellow)
         Text(label)
@@ -713,12 +795,15 @@ final class DebugWindowController {
         // Set up translation slot with queue items
         var slot = TranslationSlot()
         slot.isProcessing = true
+        slot.currentItem = TranslationQueueItem(sentence: "現在翻訳中の文です。", entryID: entry1.id, isPartial: false, elapsedTime: 7.0)
         slot.queue = [
             TranslationQueueItem(sentence: "テスト文です。", entryID: entry1.id, isPartial: false, elapsedTime: 5.0),
             TranslationQueueItem(sentence: "パーシャルテスト", entryID: entry2.id, isPartial: true, elapsedTime: 12.0),
         ]
-        slot.pendingPartialText = "デバウンス待ち"
-        slot.partialDebounceGeneration = 3
+        slot.recentlyCompleted = [
+            CompletedTranslationItem(source: TranslationQueueItem(sentence: "こんにちは", entryID: entry1.id, isPartial: false, elapsedTime: 3.0),
+                                     resultText: "Hello", completedAt: Date().addingTimeInterval(-2)),
+        ]
         vm.translationSlots = [slot]
 
         vm.pendingSentenceBuffer = "途中の文章がここに"

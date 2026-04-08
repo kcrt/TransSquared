@@ -118,6 +118,7 @@ struct ContentView: View {
             placeholder: placeholder,
             showElapsedTime: true,
             isEditable: viewModel.displayMode == .normal,
+            animateTextChanges: true,
             onLineEdited: { id, newText in
                 viewModel.editTranslationLine(slot: slot, id: id, newText: newText)
             },
