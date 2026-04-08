@@ -451,16 +451,18 @@ final class SessionViewModel {
         let assetStatus = await AssetInventory.status(forModules: [transcriber])
         logger.info("Asset status for \(self.sourceLocaleIdentifier): \(String(describing: assetStatus)), localDownloading: \(isDownloadingLocally)")
 
-        switch assetStatus {
-        case .installed:
-            break
-        case .downloading, _ where isDownloadingLocally:
+        if assetStatus == .downloading || isDownloadingLocally {
             logger.info("Session start aborted: speech assets still downloading for \(self.sourceLocaleIdentifier)")
             errorMessage = String(
                 localized: "Speech recognition model is still downloading. Please wait and try again.",
                 comment: "Error shown when speech model is still downloading at session start"
             )
             return
+        }
+
+        switch assetStatus {
+        case .installed:
+            break
         case .supported:
             logger.info("Session start aborted: speech assets not installed for \(self.sourceLocaleIdentifier)")
             errorMessage = String(

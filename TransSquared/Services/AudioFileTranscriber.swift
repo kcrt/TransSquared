@@ -76,7 +76,7 @@ actor AudioFileTranscriber {
             let resultTask = Task {
                 do {
                     for try await result in transcriber.results {
-                        let event = TranscriptionEvent.from(result)
+                        let event = await TranscriptionEvent.from(result)
                         if result.isFinal {
                             capturedLogger.info("Final: \"\(String(result.text.characters))\"")
                         }

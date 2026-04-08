@@ -75,7 +75,7 @@ actor TranscriptionManager {
             do {
                 for try await result in capturedTranscriber.results {
                     resultCount += 1
-                    let event = TranscriptionEvent.from(result)
+                    let event = await TranscriptionEvent.from(result)
                     if result.isFinal {
                         logger.debug("Final result #\(resultCount): \"\(String(result.text.characters), privacy: .private)\"")
                     }

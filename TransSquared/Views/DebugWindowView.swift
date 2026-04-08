@@ -115,7 +115,7 @@ struct DebugWindowView: View {
                                     .foregroundStyle(.tertiary)
                             } else if !item.entry.source.text.isEmpty {
                                 if let partial = item.entry.pendingPartial, !partial.isEmpty {
-                                    (Text(item.entry.source.text) + Text(partial).foregroundStyle(.orange))
+                                    Text("\(item.entry.source.text)\(Text(partial).foregroundStyle(.orange))")
                                         .lineLimit(1)
                                 } else {
                                     Text(item.entry.source.text)
@@ -688,7 +688,7 @@ final class DebugWindowController {
     // Populate sample data for preview
     let _ = {
         // Add some entries
-        var entry1 = TranscriptEntry(
+        let entry1 = TranscriptEntry(
             source: TransString(text: "こんにちは、今日はいい天気ですね。", isPartial: false),
             translations: [
                 0: TransString(text: "Hello, nice weather today.", isPartial: false, finalizedAt: Date())
@@ -699,7 +699,7 @@ final class DebugWindowController {
         )
         vm.entries.append(entry1)
 
-        var entry2 = TranscriptEntry(
+        let entry2 = TranscriptEntry(
             source: TransString(text: "明日の予定は", isPartial: false),
             pendingPartial: "どうなっていますか",
             translations: [

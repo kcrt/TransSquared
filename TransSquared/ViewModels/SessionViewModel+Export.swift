@@ -63,15 +63,16 @@ extension SessionViewModel {
         panel.begin { [weak self, sourceURL] response in
             guard response == .OK, let destURL = panel.url else { return }
             // Offload file I/O to avoid blocking the main thread for large files.
+            let log = logger
             Task.detached {
                 do {
                     if FileManager.default.fileExists(atPath: destURL.path) {
                         try FileManager.default.removeItem(at: destURL)
                     }
                     try FileManager.default.copyItem(at: sourceURL, to: destURL)
-                    logger.info("Audio recording exported to \(destURL.path)")
+                    log.info("Audio recording exported to \(destURL.path)")
                 } catch {
-                    logger.error("Failed to export audio: \(error.localizedDescription)")
+                    log.error("Failed to export audio: \(error.localizedDescription)")
                     await MainActor.run { [weak self] in
                         self?.errorMessage = "Failed to export audio: \(error.localizedDescription)"
                     }

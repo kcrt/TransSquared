@@ -155,8 +155,7 @@ struct TranscriptPaneView: View {
     private func styledLineText(_ line: TranscriptLine) -> Text {
         if let prefix = line.finalizedPrefix {
             let suffix = String(line.text.dropFirst(prefix.count))
-            return Text(prefix).foregroundStyle(.primary)
-                + Text(suffix).foregroundStyle(.secondary).italic()
+            return Text("\(Text(prefix).foregroundStyle(.primary))\(Text(suffix).foregroundStyle(.secondary).italic())")
         } else if line.isPartial {
             return Text(line.text).foregroundStyle(.secondary).italic()
         } else {
