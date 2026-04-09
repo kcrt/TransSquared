@@ -25,7 +25,8 @@ struct TranscriptPaneView: View {
     @State private var editingLineID: UUID?
     @State private var editText: String = ""
     @FocusState private var isEditing: Bool
-    @State private var hoveredLineID: UUID?
+    // Note: hoveredLineID was removed — per-row .onHover caused @State mutations
+    // during LazyVStack scrolling that froze SwiftUI's layout engine.
 
     var body: some View {
         if lines.isEmpty, let placeholder {
@@ -34,31 +35,23 @@ struct TranscriptPaneView: View {
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(lines) { line in
-                            if line.isSeparator {
-                                Divider()
-                                    .padding(.vertical, 4)
-                                    .id(line.id)
-                            } else {
-                                lineRow(line)
-                                    .id(line.id)
-                            }
-                        }
-                    }
-                    .padding(8)
-                }
-                .scrollIndicators(.hidden)
-                .onChange(of: lines.last?.text) {
-                    if let lastLine = lines.last {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            proxy.scrollTo(lastLine.id, anchor: .bottom)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(lines) { line in
+                        if line.isSeparator {
+                            Divider()
+                                .padding(.vertical, 4)
+                                .id(line.id)
+                        } else {
+                            lineRow(line)
+                                .id(line.id)
                         }
                     }
                 }
+                .padding(8)
             }
+            .defaultScrollAnchor(.bottom)
+            .scrollIndicators(.hidden)
         }
     }
 
@@ -82,8 +75,10 @@ struct TranscriptPaneView: View {
     @ViewBuilder
     private func timestampColumn(_ line: TranscriptLine, isHighlighted: Bool) -> some View {
         if let elapsed = line.elapsedTime {
-            let showPlayButton = isHighlighted && canPlayback
-                && hoveredLineID == line.id && line.sentenceID != nil
+            // Play button is shown whenever the row is highlighted (no hover required).
+            // Per-row .onHover was removed because it caused @State mutations during
+            // LazyVStack scrolling, freezing SwiftUI's AG::Graph::UpdateStack.
+            let showPlayButton = isHighlighted && canPlayback && line.sentenceID != nil
             ZStack {
                 Text(elapsed.formattedMMSS)
                     .font(.system(size: fontSize * 0.75, design: .monospaced))
@@ -101,9 +96,6 @@ struct TranscriptPaneView: View {
             .accessibilityElement()
             .accessibilityLabel(elapsed.formattedMMSS)
             .accessibilityAddTraits(canPlayback ? .isButton : [])
-            .onHover { isHovered in
-                hoveredLineID = isHovered ? line.id : nil
-            }
             .onTapGesture {
                 guard let sentenceID = line.sentenceID else { return }
                 if isHighlighted && canPlayback {
@@ -153,7 +145,8 @@ struct TranscriptPaneView: View {
                 .font(.system(size: fontSize))
                 .contentTransition(animateTextChanges ? .interpolate : .identity)
                 .animation(animateTextChanges ? .easeInOut(duration: 0.3) : nil, value: line.text)
-                .textSelection(.enabled)
+                // .textSelection(.enabled) removed — creates NSTextView per row in
+                // LazyVStack, causing layout invalidation cascades during scrolling on macOS.
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

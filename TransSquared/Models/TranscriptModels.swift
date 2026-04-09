@@ -147,7 +147,7 @@ struct TranscriptEntry: Identifiable, Sendable {
 
 /// A single line of transcribed/translated text displayed in the UI.
 /// Derived from `TranscriptEntry` for view consumption.
-struct TranscriptLine: Identifiable, Sendable {
+struct TranscriptLine: Identifiable, Sendable, Equatable {
     let id: UUID
     var text: String
     var isPartial: Bool

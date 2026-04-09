@@ -83,8 +83,9 @@ final class SessionViewModel {
     /// Use for bulk operations (clear, reset) where the update must be visible immediately.
     func recomputeDisplayLines() {
         displayUpdatePending = false
-        sourceLines = entries.flatMap { $0.sourceTranscriptLines() }
-        translationLinesPerSlot = (0..<targetCount).map { slot in
+
+        let newSourceLines = entries.flatMap { $0.sourceTranscriptLines() }
+        let newTranslationLines = (0..<targetCount).map { slot in
             entries.compactMap { entry in
                 if entry.isSeparator {
                     return TranscriptLine(id: entry.id, text: "", isPartial: false, isSeparator: true)
@@ -92,6 +93,13 @@ final class SessionViewModel {
                 return entry.translationTranscriptLine(forSlot: slot)
             }
         }
+
+        // Only assign if the values actually changed. @Observable triggers observation
+        // on ANY property write (even if the value is identical), which causes
+        // ContentView → TranscriptPaneView re-renders. Skipping no-op writes prevents
+        // unnecessary SwiftUI observation cascades.
+        if newSourceLines != sourceLines { sourceLines = newSourceLines }
+        if newTranslationLines != translationLinesPerSlot { translationLinesPerSlot = newTranslationLines }
     }
 
     var isSessionActive = false
