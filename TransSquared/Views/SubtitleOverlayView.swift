@@ -15,7 +15,13 @@ struct SubtitleContainerView: View {
                 fontSize: viewModel.fontSize,
                 now: context.date
             )
+            .environment(\.layoutDirection, subtitleLayoutDirection)
         }
+    }
+
+    private var subtitleLayoutDirection: LayoutDirection {
+        let lang = Locale.Language(identifier: viewModel.targetLanguageIdentifiers[0])
+        return lang.characterDirection == .rightToLeft ? .rightToLeft : .leftToRight
     }
 }
 

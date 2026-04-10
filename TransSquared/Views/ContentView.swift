@@ -29,6 +29,7 @@ struct ContentView: View {
                     viewModel.playFromTimestamp(elapsed, entryID: entryID)
                 }
             )
+            .environment(\.layoutDirection, layoutDirection(for: viewModel.sourceLocaleIdentifier))
             Divider()
 
             ForEach(0..<viewModel.targetCount, id: \.self) { slot in
@@ -130,6 +131,7 @@ struct ContentView: View {
                 viewModel.speakTranslation(entryID: entryID, slot: slot)
             }
         )
+        .environment(\.layoutDirection, layoutDirection(for: viewModel.targetLanguageIdentifiers[slot]))
     }
 
     private func toggleHighlight(_ sentenceID: UUID) {
@@ -177,6 +179,11 @@ struct ContentView: View {
     /// The main application window (excludes subtitle overlay panels).
     private var mainWindow: NSWindow? {
         NSApplication.shared.mainWindow ?? NSApplication.shared.windows.first { !($0 is NSPanel) }
+    }
+
+    private func layoutDirection(for localeIdentifier: String) -> LayoutDirection {
+        Locale.Language(identifier: localeIdentifier).characterDirection == .rightToLeft
+            ? .rightToLeft : .leftToRight
     }
 
     private func setWindowLevel(_ alwaysOnTop: Bool) {
