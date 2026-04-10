@@ -146,11 +146,13 @@ struct AppMenuCommands: Commands {
             Button("Add Target Language") {
                 viewModel?.addTargetLanguage()
             }
+            .keyboardShortcut("t", modifiers: [.command, .shift])
             .disabled(addTargetDisabled)
 
             Button("Remove Target Language") {
                 viewModel?.removeTargetLanguage()
             }
+            .keyboardShortcut("t", modifiers: [.command, .option])
             .disabled(removeTargetDisabled)
 
             Divider()
