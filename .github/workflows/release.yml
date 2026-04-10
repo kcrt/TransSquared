@@ -121,6 +121,25 @@ jobs:
           draft: false
           files: ${{ runner.temp }}/TransSquared.dmg
 
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA256=$(shasum -a 256 "$RUNNER_TEMP/TransSquared.dmg" | awk '{print $1}')
+
+          git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/kcrt/homebrew-kcrt.git $RUNNER_TEMP/homebrew-kcrt
+          cd $RUNNER_TEMP/homebrew-kcrt
+
+          sed -i '' "s/version \".*\"/version \"${VERSION}\"/" Casks/transsquared.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"${SHA256}\"/" Casks/transsquared.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/transsquared.rb
+          git commit -m ":bookmark: Update TransSquared to ${VERSION}"
+          git push
+
       - name: Clean up keychain
         if: always()
         run: security delete-keychain $RUNNER_TEMP/build.keychain-db 2>/dev/null || true
