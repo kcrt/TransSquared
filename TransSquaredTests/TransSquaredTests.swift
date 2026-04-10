@@ -13,7 +13,7 @@ import Testing
 
 /// Creates an ephemeral `UserDefaults` suite that won't pollute the app's real settings.
 @MainActor
-private func makeTestViewModel() -> SessionViewModel {
+func makeTestViewModel() -> SessionViewModel {
     let suiteName = "com.transsquared.tests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!
     return SessionViewModel(defaults: defaults)
@@ -81,19 +81,19 @@ struct TranscriptEntryTests {
         #expect(lines[0].sentenceID == entry.id)
     }
 
-    @Test func sourceTranscriptLinesWithPendingPartialShowsBothLines() {
-        // When source has finalized text and pendingPartial exists,
-        // they appear as two separate lines (finalized + partial).
+    @Test func sourceTranscriptLinesWithPendingPartialCombinesIntoOneLine() {
+        // When source has finalized text and pendingPartial exists, they are merged
+        // into a single partial line so the view can style each portion differently
+        // via `finalizedPrefix`.
         let entry = TranscriptEntry(
             source: TransString(text: "Hello.", isPartial: false),
             pendingPartial: " How are"
         )
         let lines = entry.sourceTranscriptLines()
-        #expect(lines.count == 2)
-        #expect(lines[0].text == "Hello.")
-        #expect(lines[0].isPartial == false)
-        #expect(lines[1].text == " How are")
-        #expect(lines[1].isPartial == true)
+        #expect(lines.count == 1)
+        #expect(lines[0].text == "Hello. How are")
+        #expect(lines[0].isPartial == true)
+        #expect(lines[0].finalizedPrefix == "Hello.")
     }
 
     @Test func sourceTranscriptLinesPartialOnly() {
