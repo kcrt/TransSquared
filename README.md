@@ -20,6 +20,12 @@ A macOS application for real-time speech transcription and translation. Trans² 
 - **Audio file transcription** — Transcribe existing audio files (WAV, MP3, M4A, AIFF) via File → Transcribe Audio File (⌘O)
 - **Export** — Save transcripts as text or subtitles (.srt / .vtt), and export audio recordings (.m4a)
 
+## Installation
+
+```bash
+brew install --cask kcrt/kcrt/transsquared
+```
+
 ## Requirements
 
 - macOS 26 or later
