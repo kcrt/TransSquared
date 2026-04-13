@@ -256,19 +256,23 @@ struct TranslationSlotTests {
         var slot = TranslationSlot()
         slot.queue.append(TranslationQueueItem(sentence: "test", entryID: UUID(), isPartial: false, elapsedTime: nil))
         slot.partialEntryID = UUID()
+        slot.isProcessing = true
+        slot.currentItem = TranslationQueueItem(sentence: "running", entryID: UUID(), isPartial: false, elapsedTime: nil)
 
         slot.reset()
 
         #expect(slot.queue.isEmpty)
         #expect(slot.partialEntryID == nil)
-        #expect(slot.config == nil)
+        #expect(slot.isProcessing == false)
+        #expect(slot.currentItem == nil)
     }
 
     @Test func defaultValues() {
         let slot = TranslationSlot()
         #expect(slot.queue.isEmpty)
         #expect(slot.partialEntryID == nil)
-        #expect(slot.config == nil)
+        #expect(slot.isProcessing == false)
+        #expect(slot.currentItem == nil)
     }
 }
 
