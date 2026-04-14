@@ -81,19 +81,18 @@ struct TranscriptEntryTests {
         #expect(lines[0].sentenceID == entry.id)
     }
 
-    @Test func sourceTranscriptLinesWithPendingPartialShowsBothLines() {
+    @Test func sourceTranscriptLinesWithPendingPartialShowsCombinedLine() {
         // When source has finalized text and pendingPartial exists,
-        // they appear as two separate lines (finalized + partial).
+        // they are combined into a single line with finalizedPrefix.
         let entry = TranscriptEntry(
             source: TransString(text: "Hello.", isPartial: false),
             pendingPartial: " How are"
         )
         let lines = entry.sourceTranscriptLines()
-        #expect(lines.count == 2)
-        #expect(lines[0].text == "Hello.")
-        #expect(lines[0].isPartial == false)
-        #expect(lines[1].text == " How are")
-        #expect(lines[1].isPartial == true)
+        #expect(lines.count == 1)
+        #expect(lines[0].text == "Hello. How are")
+        #expect(lines[0].isPartial == true)
+        #expect(lines[0].finalizedPrefix == "Hello.")
     }
 
     @Test func sourceTranscriptLinesPartialOnly() {
@@ -334,10 +333,6 @@ struct TranscriptionEventTests {
         #expect(vm.entries.count == 1)
         #expect(vm.entries[0].pendingPartial == "Hello")
         #expect(vm.entries[0].source.text.isEmpty)
-        // Also verify derived sourceLines
-        #expect(vm.sourceLines.count == 1)
-        #expect(vm.sourceLines[0].text == "Hello")
-        #expect(vm.sourceLines[0].isPartial == true)
     }
 
     @Test func partialEventReplacesPreviousPartial() {
@@ -346,8 +341,6 @@ struct TranscriptionEventTests {
         vm.handleTranscriptionEvent(.partial("Hello", duration: nil, audioOffset: nil))
         #expect(vm.entries.count == 1)
         #expect(vm.entries[0].pendingPartial == "Hello")
-        #expect(vm.sourceLines.count == 1)
-        #expect(vm.sourceLines[0].text == "Hello")
     }
 
     @Test func finalEventClearsPartialAndAccumulatesSource() {
@@ -690,12 +683,14 @@ struct HasTranscriptContentTests {
     @Test func withEntriesReturnsTrue() {
         let vm = makeTestViewModel()
         vm.entries = [TranscriptEntry(source: TransString(text: "Hello", isPartial: false))]
+        vm.recomputeDisplayLines()
         #expect(vm.hasTranscriptContent == true)
     }
 
     @Test func withSeparatorOnlyReturnsTrue() {
         let vm = makeTestViewModel()
         vm.entries = [TranscriptEntry(isSeparator: true)]
+        vm.recomputeDisplayLines()
         #expect(vm.hasTranscriptContent == true)
     }
 }
