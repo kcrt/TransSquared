@@ -261,14 +261,12 @@ struct TranslationSlotTests {
 
         #expect(slot.queue.isEmpty)
         #expect(slot.partialEntryID == nil)
-        #expect(slot.config == nil)
     }
 
     @Test func defaultValues() {
         let slot = TranslationSlot()
         #expect(slot.queue.isEmpty)
         #expect(slot.partialEntryID == nil)
-        #expect(slot.config == nil)
     }
 }
 
@@ -699,6 +697,243 @@ struct HasTranscriptContentTests {
         let vm = makeTestViewModel()
         vm.entries = [TranscriptEntry(isSeparator: true)]
         #expect(vm.hasTranscriptContent == true)
+    }
+}
+
+// MARK: - TimeInterval Formatting Tests
+
+struct TimeIntervalFormattingTests {
+
+    @Test func formattedMMSSZero() {
+        #expect(TimeInterval(0).formattedMMSS == "00:00")
+    }
+
+    @Test func formattedMMSSUnderOneMinute() {
+        #expect(TimeInterval(45).formattedMMSS == "00:45")
+    }
+
+    @Test func formattedMMSSExactMinute() {
+        #expect(TimeInterval(60).formattedMMSS == "01:00")
+    }
+
+    @Test func formattedMMSSMultipleMinutes() {
+        #expect(TimeInterval(225).formattedMMSS == "03:45")
+    }
+
+    @Test func formattedMMSSOverAnHour() {
+        // 65 minutes = 3900 seconds → "65:00"
+        #expect(TimeInterval(3900).formattedMMSS == "65:00")
+    }
+
+    @Test func formattedMMSSNegativeClampedToZero() {
+        #expect(TimeInterval(-10).formattedMMSS == "00:00")
+    }
+
+    @Test func formattedMMSSFractionalTruncated() {
+        // 45.9 seconds → truncated to 45
+        #expect(TimeInterval(45.9).formattedMMSS == "00:45")
+    }
+
+    @Test func formattedMSSZero() {
+        #expect(TimeInterval(0).formattedMSS == "0:00")
+    }
+
+    @Test func formattedMSSUnderOneMinute() {
+        #expect(TimeInterval(9).formattedMSS == "0:09")
+    }
+
+    @Test func formattedMSSMultipleMinutes() {
+        #expect(TimeInterval(225).formattedMSS == "3:45")
+    }
+
+    @Test func formattedMSSNegativeClampedToZero() {
+        #expect(TimeInterval(-5).formattedMSS == "0:00")
+    }
+}
+
+// MARK: - TransSquaredError Tests
+
+struct TransSquaredErrorTests {
+
+    @Test func allCasesHaveDescriptions() {
+        let cases: [TransSquaredError] = [
+            .alreadyCapturing, .microphoneUnavailable,
+            .alreadyRunning, .audioFormatUnavailable, .recordingFailed
+        ]
+        for error in cases {
+            #expect(error.errorDescription != nil)
+            #expect(!error.errorDescription!.isEmpty)
+        }
+    }
+
+    @Test func conformsToLocalizedError() {
+        let error: any LocalizedError = TransSquaredError.microphoneUnavailable
+        #expect(error.errorDescription != nil)
+    }
+}
+
+// MARK: - PermissionIssue Tests
+
+struct PermissionIssueTests {
+
+    @Test func identifiable() {
+        let mic = PermissionIssue.microphone
+        let speech = PermissionIssue.speechRecognition
+        #expect(mic.id != speech.id)
+    }
+
+    @Test func titleAndMessageAreNonEmpty() {
+        for issue in [PermissionIssue.microphone, .speechRecognition] {
+            #expect(!issue.title.isEmpty)
+            #expect(!issue.message.isEmpty)
+        }
+    }
+}
+
+// MARK: - TranslationSlot Partial State Tests
+
+struct TranslationSlotPartialStateTests {
+
+    @Test func resetPartialStateClearsFields() {
+        var slot = TranslationSlot()
+        slot.partialEntryID = UUID()
+        slot.pendingPartialText = "Hello"
+        slot.pendingPartialElapsedTime = 5.0
+
+        slot.resetPartialState()
+
+        #expect(slot.partialEntryID == nil)
+        #expect(slot.pendingPartialText == nil)
+        #expect(slot.pendingPartialElapsedTime == nil)
+        #expect(slot.partialTranslationTimer == nil)
+    }
+
+    @Test func resetClearsEverythingIncludingQueue() {
+        var slot = TranslationSlot()
+        slot.queue.append(TranslationQueueItem(sentence: "A", entryID: UUID(), isPartial: false, elapsedTime: nil))
+        slot.isProcessing = true
+        slot.currentItem = TranslationQueueItem(sentence: "B", entryID: UUID(), isPartial: false, elapsedTime: nil)
+        slot.recentlyCompleted.append(CompletedTranslationItem(source: TranslationQueueItem(sentence: "C", entryID: UUID(), isPartial: false, elapsedTime: nil), resultText: "D", completedAt: Date()))
+
+        slot.reset()
+
+        #expect(slot.queue.isEmpty)
+        #expect(slot.isProcessing == false)
+        #expect(slot.currentItem == nil)
+        #expect(slot.recentlyCompleted.isEmpty)
+        #expect(slot.partialEntryID == nil)
+    }
+}
+
+// MARK: - TranscriptEntry sourceTranscriptLines Combined Line Tests
+
+struct SourceTranscriptLinesCombinedTests {
+
+    @Test func combinedFinalizedAndPartialProducesSingleLine() {
+        let entry = TranscriptEntry(
+            source: TransString(text: "Hello. ", isPartial: false),
+            pendingPartial: "How are",
+            elapsedTime: 5.0,
+            duration: 2.0
+        )
+        let lines = entry.sourceTranscriptLines()
+        #expect(lines.count == 1)
+        #expect(lines[0].text == "Hello. How are")
+        #expect(lines[0].isPartial == true)
+        #expect(lines[0].finalizedPrefix == "Hello. ")
+        #expect(lines[0].elapsedTime == 5.0)
+        #expect(lines[0].duration == 2.0)
+    }
+
+    @Test func purePartialHasNoFinalizedPrefix() {
+        let entry = TranscriptEntry(pendingPartial: "typing")
+        let lines = entry.sourceTranscriptLines()
+        #expect(lines.count == 1)
+        #expect(lines[0].finalizedPrefix == nil)
+    }
+
+    @Test func committedEntryHasSentenceID() {
+        let entry = TranscriptEntry(
+            source: TransString(text: "Done.", isPartial: false),
+            isCommitted: true
+        )
+        let lines = entry.sourceTranscriptLines()
+        #expect(lines[0].sentenceID == entry.id)
+    }
+
+    @Test func uncommittedEntryHasNoSentenceID() {
+        let entry = TranscriptEntry(
+            source: TransString(text: "Not done", isPartial: false),
+            isCommitted: false
+        )
+        let lines = entry.sourceTranscriptLines()
+        #expect(lines[0].sentenceID == nil)
+    }
+
+    @Test func emptyPartialIsIgnored() {
+        // Empty pendingPartial string should behave like nil
+        let entry = TranscriptEntry(
+            source: TransString(text: "Hello", isPartial: false),
+            pendingPartial: ""
+        )
+        let lines = entry.sourceTranscriptLines()
+        #expect(lines.count == 1)
+        #expect(lines[0].text == "Hello")
+        #expect(lines[0].isPartial == false)
+    }
+}
+
+// MARK: - TranscriptLine Equatable Tests
+
+struct TranscriptLineEquatableTests {
+
+    @Test func equalLinesAreEqual() {
+        let id = UUID()
+        let a = TranscriptLine(id: id, text: "Hello", isPartial: false, elapsedTime: 1.0)
+        let b = TranscriptLine(id: id, text: "Hello", isPartial: false, elapsedTime: 1.0)
+        #expect(a == b)
+    }
+
+    @Test func differentTextNotEqual() {
+        let id = UUID()
+        let a = TranscriptLine(id: id, text: "Hello", isPartial: false)
+        let b = TranscriptLine(id: id, text: "World", isPartial: false)
+        #expect(a != b)
+    }
+
+    @Test func differentPartialNotEqual() {
+        let id = UUID()
+        let a = TranscriptLine(id: id, text: "Hello", isPartial: false)
+        let b = TranscriptLine(id: id, text: "Hello", isPartial: true)
+        #expect(a != b)
+    }
+}
+
+// MARK: - DisplayMode Tests
+
+struct DisplayModeTests {
+
+    @Test func allCases() {
+        #expect(DisplayMode.allCases.count == 2)
+        #expect(DisplayMode.allCases.contains(.normal))
+        #expect(DisplayMode.allCases.contains(.subtitle))
+    }
+
+    @Test func rawValues() {
+        #expect(DisplayMode.normal.rawValue == "normal")
+        #expect(DisplayMode.subtitle.rawValue == "subtitle")
+    }
+}
+
+// MARK: - RecordingSegment Tests
+
+struct RecordingSegmentTests {
+
+    @Test func storesURLAndOffset() {
+        let url = URL(fileURLWithPath: "/tmp/test.m4a")
+        let segment = RecordingSegment(url: url, elapsedTimeOffset: 10.0)
+        #expect(segment.url == url)
+        #expect(segment.elapsedTimeOffset == 10.0)
     }
 }
 
