@@ -1739,6 +1739,247 @@ struct ExportEdgeCaseTests {
     }
 }
 
+// MARK: - Transcription Event Edge Cases
+
+@MainActor
+struct TranscriptionEventEdgeCaseTests {
+
+    @Test func partialEventSetsElapsedTimeFromAudioOffset() {
+        let vm = makeTestViewModel()
+        vm.accumulatedElapsedTime = 10.0
+        vm.handleTranscriptionEvent(.partial("Hi", duration: 0.5, audioOffset: 2.0))
+        #expect(vm.entries[0].elapsedTime == 12.0) // accumulated + offset
+    }
+
+    @Test func partialEventDoesNotOverwriteExistingElapsedTime() {
+        let vm = makeTestViewModel()
+        vm.accumulatedElapsedTime = 10.0
+        vm.handleTranscriptionEvent(.partial("Hi", duration: 0.5, audioOffset: 2.0))
+        // Second partial with different offset should NOT change elapsedTime
+        vm.handleTranscriptionEvent(.partial("Hi there", duration: 1.0, audioOffset: 3.0))
+        #expect(vm.entries[0].elapsedTime == 12.0) // still the first value
+    }
+
+    @Test func finalizedEventSetsElapsedTimeFromAudioOffset() {
+        let vm = makeTestViewModel()
+        vm.accumulatedElapsedTime = 5.0
+        vm.handleTranscriptionEvent(.finalized("Done.", duration: 1.0, audioOffset: 3.0))
+        #expect(vm.entries[0].elapsedTime == 8.0) // 5 + 3
+    }
+
+    @Test func durationSpansFromEntryStartToChunkEnd() {
+        let vm = makeTestViewModel()
+        vm.accumulatedElapsedTime = 0
+        // First chunk: offset=1.0, duration=0.5 → entry starts at 1.0, ends at 1.5
+        vm.handleTranscriptionEvent(.finalized("Hello ", duration: 0.5, audioOffset: 1.0))
+        // Second chunk in same entry: offset=2.0, duration=0.8 → ends at 2.8
+        // Duration should be 2.8 - 1.0 = 1.8
+        vm.handleTranscriptionEvent(.finalized("world", duration: 0.8, audioOffset: 2.0))
+        #expect(vm.entries[0].elapsedTime == 1.0)
+        #expect(abs(vm.entries[0].duration! - 1.8) < 0.001)
+    }
+
+    @Test func partialEventUpdatesDurationProgressively() {
+        let vm = makeTestViewModel()
+        vm.accumulatedElapsedTime = 0
+        vm.handleTranscriptionEvent(.partial("Hel", duration: 0.3, audioOffset: 1.0))
+        #expect(abs(vm.entries[0].duration! - 0.3) < 0.001)
+        vm.handleTranscriptionEvent(.partial("Hello", duration: 0.5, audioOffset: 1.5))
+        // Duration: (1.5 + 0.5) - 1.0 = 1.0
+        #expect(abs(vm.entries[0].duration! - 1.0) < 0.001)
+    }
+
+    @Test func finalizedWithNilAudioOffsetFallsBackToCurrentElapsedTime() {
+        let vm = makeTestViewModel()
+        vm.accumulatedElapsedTime = 20.0
+        vm.sessionStartDate = Date()
+        vm.handleTranscriptionEvent(.finalized("No offset.", duration: nil, audioOffset: nil))
+        // Should use currentElapsedTime (approx 20 + small delta)
+        #expect(vm.entries[0].elapsedTime != nil)
+        #expect(vm.entries[0].elapsedTime! >= 20.0)
+    }
+
+    @Test func partialWithNilAudioOffsetLeavesElapsedTimeNil() {
+        let vm = makeTestViewModel()
+        vm.handleTranscriptionEvent(.partial("No offset", duration: nil, audioOffset: nil))
+        #expect(vm.entries[0].elapsedTime == nil)
+    }
+
+    @Test func fileTranscriptionUsesOffsetDirectly() {
+        let vm = makeTestViewModel()
+        vm.isTranscribingFile = true
+        vm.accumulatedElapsedTime = 99.0
+        vm.handleTranscriptionEvent(.finalized("Test.", duration: 1.0, audioOffset: 5.0))
+        // File transcription: offset used directly, not added to accumulated
+        #expect(vm.entries[0].elapsedTime == 5.0)
+    }
+
+    @Test func autoReplacementsAppliedToPartialEvents() {
+        let vm = makeTestViewModel()
+        vm.autoReplacementsByLocale[vm.sourceLocaleIdentifier] = [
+            AutoReplacement(from: "teh", to: "the")
+        ]
+        vm.handleTranscriptionEvent(.partial("teh cat", duration: nil, audioOffset: nil))
+        #expect(vm.entries[0].pendingPartial == "the cat")
+    }
+
+    @Test func autoReplacementsAppliedToFinalizedEvents() {
+        let vm = makeTestViewModel()
+        vm.autoReplacementsByLocale[vm.sourceLocaleIdentifier] = [
+            AutoReplacement(from: "teh", to: "the")
+        ]
+        vm.handleTranscriptionEvent(.finalized("teh cat.", duration: nil, audioOffset: nil))
+        #expect(vm.entries[0].source.text == "the cat.")
+    }
+
+    @Test func commitSentenceCreatesNewEntryForCarryOverPartial() {
+        let vm = makeTestViewModel()
+        // Simulate: finalized text with pending partial in same entry
+        let idx = vm.ensureCurrentEntry()
+        vm.entries[idx].source.text = "First sentence."
+        vm.entries[idx].pendingPartial = "Second"
+        vm.pendingSentenceBuffer = "First sentence."
+
+        vm.commitSentence("First sentence.")
+
+        // First entry should be committed without partial
+        #expect(vm.entries[0].isCommitted == true)
+        #expect(vm.entries[0].pendingPartial == nil)
+        // A new entry should carry over the partial
+        #expect(vm.entries.count == 2)
+        #expect(vm.entries[1].pendingPartial == "Second")
+        #expect(vm.entries[1].isCommitted == false)
+    }
+
+    @Test func commitSentenceIncrementsSegmentIndex() {
+        let vm = makeTestViewModel()
+        let idx = vm.ensureCurrentEntry()
+        vm.entries[idx].source.text = "Done."
+        vm.pendingSentenceBuffer = "Done."
+
+        #expect(vm.segmentIndex == 0)
+        vm.commitSentence("Done.")
+        #expect(vm.segmentIndex == 1)
+    }
+
+    @Test func commitEmptySentenceIsNoOp() {
+        let vm = makeTestViewModel()
+        vm.commitSentence("")
+        #expect(vm.segmentIndex == 0)
+    }
+
+    @Test func multipleSentenceBoundariesInSequence() {
+        let vm = makeTestViewModel()
+        // Simulate a full flow: partial → finalized with period → commit
+        vm.handleTranscriptionEvent(.partial("Hello", duration: nil, audioOffset: nil))
+        vm.handleTranscriptionEvent(.finalized("Hello.", duration: nil, audioOffset: nil))
+        // checkSentenceBoundary should have committed
+        #expect(vm.entries[0].isCommitted == true)
+        #expect(vm.segmentIndex == 1)
+
+        // Next sentence
+        vm.handleTranscriptionEvent(.finalized("World!", duration: nil, audioOffset: nil))
+        #expect(vm.entries[1].isCommitted == true)
+        #expect(vm.segmentIndex == 2)
+    }
+}
+
+@MainActor
+struct EnqueueTranslationTests {
+
+    @Test func enqueueAddsToSlotQueue() {
+        let vm = makeTestViewModel()
+        vm.translationSlots = [TranslationSlot()]
+        vm.translationConfigs = [nil]
+
+        let entryID = UUID()
+        vm.enqueueTranslation(slot: 0, item: TranslationQueueItem(
+            sentence: "Hello", entryID: entryID, isPartial: false, elapsedTime: nil
+        ))
+
+        #expect(vm.translationSlots[0].queue.count == 1)
+        #expect(vm.translationSlots[0].queue[0].sentence == "Hello")
+    }
+
+    @Test func enqueueOutOfBoundsSlotIsIgnored() {
+        let vm = makeTestViewModel()
+        vm.translationSlots = [TranslationSlot()]
+
+        // Should not crash
+        vm.enqueueTranslation(slot: 5, item: TranslationQueueItem(
+            sentence: "Hello", entryID: UUID(), isPartial: false, elapsedTime: nil
+        ))
+        #expect(vm.translationSlots[0].queue.isEmpty)
+    }
+}
+
+@MainActor
+struct FileTranscriptionStateTests {
+
+    @Test func requestFileTranscriptionBlockedDuringSession() {
+        let vm = makeTestViewModel()
+        vm.isSessionActive = true
+        vm.requestFileTranscription(url: URL(fileURLWithPath: "/tmp/test.m4a"))
+        #expect(vm.errorMessage != nil)
+    }
+
+    @Test func requestFileTranscriptionBlockedWhileTranscribing() {
+        let vm = makeTestViewModel()
+        vm.isTranscribingFile = true
+        vm.requestFileTranscription(url: URL(fileURLWithPath: "/tmp/test.m4a"))
+        #expect(vm.errorMessage != nil)
+    }
+
+    @Test func fileTranslationProgressZeroWhenNoSegments() {
+        let vm = makeTestViewModel()
+        vm.segmentIndex = 0
+        #expect(vm.fileTranslationProgress(forSlot: 0) == 0)
+    }
+
+    @Test func fileTranslationProgressCalculation() {
+        let vm = makeTestViewModel()
+        vm.segmentIndex = 10
+        vm.translationSlots = [TranslationSlot()]
+        // 3 pending final items → 7 completed
+        vm.translationSlots[0].queue = [
+            TranslationQueueItem(sentence: "a", entryID: UUID(), isPartial: false, elapsedTime: nil),
+            TranslationQueueItem(sentence: "b", entryID: UUID(), isPartial: false, elapsedTime: nil),
+            TranslationQueueItem(sentence: "c", entryID: UUID(), isPartial: false, elapsedTime: nil),
+        ]
+        let progress = vm.fileTranslationProgress(forSlot: 0)
+        #expect(progress == 0.7)
+    }
+
+    @Test func fileTranslationProgressIgnoresPartialItems() {
+        let vm = makeTestViewModel()
+        vm.segmentIndex = 5
+        vm.translationSlots = [TranslationSlot()]
+        vm.translationSlots[0].queue = [
+            TranslationQueueItem(sentence: "a", entryID: UUID(), isPartial: true, elapsedTime: nil),
+            TranslationQueueItem(sentence: "b", entryID: UUID(), isPartial: false, elapsedTime: nil),
+        ]
+        // Only 1 final pending → 4 completed
+        let progress = vm.fileTranslationProgress(forSlot: 0)
+        #expect(progress == 0.8)
+    }
+
+    @Test func cancelFileTranscriptionClearsState() {
+        let vm = makeTestViewModel()
+        vm.isTranscribingFile = true
+        vm.pendingSentenceBuffer = "leftover"
+        vm.translationSlots = [TranslationSlot()]
+        vm.translationSlots[0].queue.append(
+            TranslationQueueItem(sentence: "q", entryID: UUID(), isPartial: false, elapsedTime: nil)
+        )
+
+        vm.cancelFileTranscription()
+
+        #expect(vm.isTranscribingFile == false)
+        #expect(vm.pendingSentenceBuffer == "")
+        #expect(vm.translationSlots[0].queue.isEmpty)
+    }
+}
+
 // MARK: - 12. Audio File Transcription Tests
 
 /// Anchor class used to locate the test bundle at runtime.
