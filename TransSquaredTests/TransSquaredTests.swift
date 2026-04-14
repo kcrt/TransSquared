@@ -937,6 +937,67 @@ struct RecordingSegmentTests {
     }
 }
 
+// MARK: - AudioLevelMonitor Tests
+
+@MainActor
+struct AudioLevelMonitorTests {
+
+    @Test func initialLevelsAreAllZero() {
+        let monitor = AudioLevelMonitor()
+        #expect(monitor.levels.count == AudioLevelMonitor.sampleCount)
+        #expect(monitor.levels.allSatisfy { $0 == 0 })
+    }
+
+    @Test func appendAddsLevel() {
+        let monitor = AudioLevelMonitor()
+        monitor.append(0.5)
+        #expect(monitor.levels.last == 0.5)
+        #expect(monitor.levels.count == AudioLevelMonitor.sampleCount)
+    }
+
+    @Test func appendMaintainsFixedSize() {
+        let monitor = AudioLevelMonitor()
+        // Append more than sampleCount values
+        for i in 0..<(AudioLevelMonitor.sampleCount + 10) {
+            monitor.append(Float(i) / 100.0)
+        }
+        #expect(monitor.levels.count == AudioLevelMonitor.sampleCount)
+        // Oldest values should have been dropped
+        let expected = Float(AudioLevelMonitor.sampleCount + 10 - 1) / 100.0
+        #expect(monitor.levels.last == expected)
+    }
+
+    @Test func appendShiftsOutOldestValue() {
+        let monitor = AudioLevelMonitor()
+        // Fill with known values
+        for i in 0..<AudioLevelMonitor.sampleCount {
+            monitor.append(Float(i + 1))
+        }
+        // All initial zeros should be gone
+        #expect(monitor.levels.first == 1.0)
+        #expect(monitor.levels.last == Float(AudioLevelMonitor.sampleCount))
+
+        // Append one more - shifts out 1.0
+        monitor.append(99.0)
+        #expect(monitor.levels.first == 2.0)
+        #expect(monitor.levels.last == 99.0)
+    }
+
+    @Test func resetSetsAllToZero() {
+        let monitor = AudioLevelMonitor()
+        monitor.append(0.8)
+        monitor.append(0.6)
+        monitor.reset()
+        #expect(monitor.levels.count == AudioLevelMonitor.sampleCount)
+        #expect(monitor.levels.allSatisfy { $0 == 0 })
+    }
+
+    @Test func sampleCountIsReasonable() {
+        #expect(AudioLevelMonitor.sampleCount > 0)
+        #expect(AudioLevelMonitor.sampleCount <= 100)
+    }
+}
+
 // MARK: - 12. Audio File Transcription Tests
 
 /// Anchor class used to locate the test bundle at runtime.
