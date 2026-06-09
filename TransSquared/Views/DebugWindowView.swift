@@ -21,11 +21,18 @@ struct DebugWindowView: View {
     @State private var selection: DebugPage? = .health
 
     var body: some View {
-        NavigationSplitView {
+        // Use HSplitView (NSSplitView) instead of NavigationSplitView: the
+        // latter always contributes a window toolbar (sidebar toggle), and
+        // when hosted inside a manually-managed NSPanel SwiftUI installs that
+        // toolbar via -[NSWindow setToolbar:] during the first layout pass,
+        // which reshapes the window and re-enters layout (_NSDetectedLayoutRecursion).
+        HSplitView {
             sidebar
-        } detail: {
+                .frame(minWidth: 220, idealWidth: 260, maxWidth: 400)
             detailView
                 .font(.system(.body, design: .monospaced))
+                .frame(minWidth: 400)
+                .layoutPriority(1)
         }
         .frame(minWidth: 650, idealWidth: 850, minHeight: 450, idealHeight: 650)
     }

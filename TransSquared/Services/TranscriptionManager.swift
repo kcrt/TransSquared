@@ -46,6 +46,18 @@ actor TranscriptionManager {
         let newAnalyzer = SpeechAnalyzer(modules: [newTranscriber])
         logger.debug("Created SpeechAnalyzer")
 
+        // If anything below this point fails after capture starts, we must tear
+        // the capture session down so the microphone isn't left running.
+        var startupSucceeded = false
+        defer {
+            if !startupSucceeded {
+                Task { [captureService, newAnalyzer] in
+                    await captureService.stopCapture()
+                    await newAnalyzer.cancelAndFinishNow()
+                }
+            }
+        }
+
         // Set contextual strings to bias recognition toward custom vocabulary
         try await newAnalyzer.setContextualStrings(contextualStrings)
 
@@ -64,6 +76,7 @@ actor TranscriptionManager {
         self.transcriber = newTranscriber
         self.analyzer = newAnalyzer
         self.isRunning = true
+        startupSucceeded = true
 
         // Start consuming transcription results
         let capturedTranscriber = newTranscriber
@@ -97,6 +110,7 @@ actor TranscriptionManager {
 
         // Start analysis in the background
         let capturedAnalyzer = newAnalyzer
+        let analyzeContinuation = continuation
         analyzeTask = Task {
             logger.debug("Analysis task started")
             do {
@@ -111,6 +125,7 @@ actor TranscriptionManager {
             } catch {
                 if !Task.isCancelled {
                     logger.error("analyzeSequence error: \(error.localizedDescription)")
+                    analyzeContinuation.yield(.error(error.localizedDescription))
                 } else {
                     logger.debug("Analysis task cancelled")
                 }

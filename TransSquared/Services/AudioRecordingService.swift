@@ -92,6 +92,11 @@ final class AudioRecordingService: @unchecked Sendable {
                 writer.add(input)
                 guard writer.startWriting() else {
                     logger.error("AVAssetWriter failed to start: \(writer.error?.localizedDescription ?? "unknown")")
+                    // Abandon the writer permanently. Without this, subsequent calls keep
+                    // hitting this branch and adding new inputs to the failed writer.
+                    state.assetWriter = nil
+                    state.writerInput = nil
+                    state.recordingURL = nil
                     return (nil, false)
                 }
                 writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)

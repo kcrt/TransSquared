@@ -38,6 +38,11 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
     private var accumulationBuffer: AVAudioPCMBuffer?
     private var accumulatedFrames: AVAudioFrameCount = 0
 
+    /// Counts consecutive `convert()` failures so we can escalate when conversion
+    /// quietly stops producing output (e.g. driver glitch). Reset on every success.
+    private var consecutiveConversionFailures = 0
+    private static let conversionFailureThreshold = 50
+
     init(targetFormat: AVAudioFormat, continuation: AsyncStream<AnalyzerInput>.Continuation, levelContinuation: AsyncStream<Float>.Continuation, recordingService: AudioRecordingService? = nil) {
         self.targetFormat = targetFormat
         self.continuation = continuation
@@ -78,7 +83,14 @@ final class AudioCaptureDelegate: NSObject, AVCaptureAudioDataOutputSampleBuffer
         // 4. Resample if needed, or pass through
         let outputBuffer: AVAudioPCMBuffer
         if needsConversion {
-            guard let converted = convert(pcmBuffer) else { return }
+            guard let converted = convert(pcmBuffer) else {
+                consecutiveConversionFailures += 1
+                if consecutiveConversionFailures == Self.conversionFailureThreshold {
+                    logger.error("Audio conversion has failed \(Self.conversionFailureThreshold) times in a row — transcription is likely degraded")
+                }
+                return
+            }
+            consecutiveConversionFailures = 0
             outputBuffer = converted
         } else {
             outputBuffer = pcmBuffer

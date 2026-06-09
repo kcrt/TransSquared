@@ -49,6 +49,13 @@ struct TranscriptPaneView: View {
                     }
                 }
                 .padding(8)
+                // Single animation observer at the pane level instead of one per row.
+                // Per-row `.animation(value:)` in a LazyVStack adds an observation point
+                // per visible cell, contributing to the same class of layout-engine
+                // stress as `.onHover`/`.textSelection`. The surrounding transaction
+                // here is enough for `.contentTransition(.interpolate)` on each Text
+                // to morph during partial-translation updates.
+                .animation(animateTextChanges ? .easeInOut(duration: 0.3) : nil, value: lines)
             }
             .defaultScrollAnchor(.bottom)
             .scrollIndicators(.hidden)
@@ -135,7 +142,6 @@ struct TranscriptPaneView: View {
                 .font(.system(size: fontSize))
                 .foregroundStyle(.primary)
                 .contentTransition(animateTextChanges ? .interpolate : .identity)
-                .animation(animateTextChanges ? .easeInOut(duration: 0.3) : nil, value: line.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .onTapGesture(count: 2) {
                     startEditing(line)
@@ -144,7 +150,6 @@ struct TranscriptPaneView: View {
             styledLineText(line)
                 .font(.system(size: fontSize))
                 .contentTransition(animateTextChanges ? .interpolate : .identity)
-                .animation(animateTextChanges ? .easeInOut(duration: 0.3) : nil, value: line.text)
                 // .textSelection(.enabled) removed — creates NSTextView per row in
                 // LazyVStack, causing layout invalidation cascades during scrolling on macOS.
                 .frame(maxWidth: .infinity, alignment: .leading)

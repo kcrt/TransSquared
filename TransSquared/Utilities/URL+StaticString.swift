@@ -5,7 +5,7 @@ extension URL {
     /// Use only for hardcoded URL constants that are known to be valid at compile time.
     init(staticString: StaticString) {
         guard let url = URL(string: String(describing: staticString)) else {
-            preconditionFailure("Invalid URL string: \(staticString)")
+            fatalError("Invalid URL string: \(staticString)")
         }
         self = url
     }

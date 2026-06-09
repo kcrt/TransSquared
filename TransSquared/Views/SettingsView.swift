@@ -124,12 +124,14 @@ private struct VocabularyTab: View {
                     .padding(.vertical, 8)
             } else {
                 List {
-                    ForEach(viewModel.currentContextualStrings, id: \.self) { word in
+                    ForEach(Array(viewModel.currentContextualStrings.enumerated()), id: \.element) { index, word in
                         HStack {
                             Text(word)
                             Spacer()
                             Button {
-                                viewModel.currentContextualStrings.removeAll { $0 == word }
+                                guard index < viewModel.currentContextualStrings.count,
+                                      viewModel.currentContextualStrings[index] == word else { return }
+                                viewModel.currentContextualStrings.remove(at: index)
                             } label: {
                                 Image(systemName: "trash")
                                     .foregroundStyle(.red)
